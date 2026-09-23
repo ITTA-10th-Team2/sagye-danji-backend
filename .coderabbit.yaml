@@ -1,0 +1,76 @@
+# ==========================================
+# CodeRabbit - 개인 포트폴리오 프로젝트
+# 무료 플랜 안정 + 균형형 리뷰 설정
+# ==========================================
+
+# 리뷰 언어 고정
+language: "ko-KR"
+
+# 과하지 않고 개선 중심 피드백 요청
+tone_instructions: "가독성, 유지보수성, 설계 관점에서 개선점을 구체적으로 제안해주세요."
+
+# 무료 플랜 사용
+enable_free_tier: true
+
+reviews:
+  # smart = 과도하게 잡지 않고 필요한 부분 중심
+  profile: chill
+
+  # PR 전체 요약 제공
+  high_level_summary: true
+
+  # GitHub 상태 체크 표시
+  review_status: true
+  commit_status: true
+
+  # 다이어그램 비활성화 (토큰 절약)
+  sequence_diagrams: false
+
+  # 혼자 개발이므로 연관 분석 기능 제거
+  assess_linked_issues: false
+  related_issues: false
+  related_prs: false
+
+  # 리뷰어/라벨 기능 제거 (AI만 사용)
+  suggested_reviewers: false
+  suggested_labels: false
+  auto_apply_labels: false
+  auto_assign_reviewers: false
+
+
+  auto_review:
+    enabled: true
+
+    # 수정된 부분만 재리뷰 (무료 플랜 핵심 옵션)
+    auto_incremental_review: true
+
+    drafts: false
+
+    ignore_title_keywords:
+      - "WIP"
+
+    base_branches:
+      - "main"
+
+
+  # 실제 코드만 리뷰
+  path_filters:
+    - "src/**"
+
+    # 빌드/캐시/외부 라이브러리 제외
+    - "!build/**"
+    - "!.gradle/**"
+    - "!node_modules/**"
+
+    # 문서 파일 제외 (토큰 절약)
+    - "!*.md"
+
+chat:
+  auto_reply: true
+
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+  learnings:
+    scope: local

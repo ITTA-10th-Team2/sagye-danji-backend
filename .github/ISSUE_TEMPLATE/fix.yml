@@ -1,0 +1,24 @@
+name: "Fix"
+description: "버그를 수정할 때 사용합니다."
+title: "Fix: "
+labels: ["Fix"]
+# GYEJOL-DANJI GitHub Project 생성 후 projects에 실제 owner/번호를 설정하세요.
+type: Task
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: "Issue 요약"
+      placeholder: "예: 로그인 버튼 클릭 시 반응이 없습니다."
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: "Issue 상세"
+      placeholder: "예: 콘솔에 400 Bad Request 에러가 발생합니다."
+  - type: textarea
+    id: todo
+    attributes:
+      label: "To do"
+      placeholder: "예: - [ ] API 요청 파라미터 수정"

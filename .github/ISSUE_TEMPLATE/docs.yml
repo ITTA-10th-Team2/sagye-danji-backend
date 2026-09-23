@@ -1,0 +1,24 @@
+name: "Docs"
+description: "문서를 수정할 때 사용합니다."
+title: "Docs: "
+labels: ["Docs"]
+# GYEJOL-DANJI GitHub Project 생성 후 projects에 실제 owner/번호를 설정하세요.
+type: Task
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: "Issue 요약"
+      placeholder: "예: GitHub Actions 배포 스크립트 수정이 필요합니다."
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: "Issue 상세"
+      placeholder: "예: 빌드 속도 개선을 위해 Gradle 캐싱을 적용합니다."
+  - type: textarea
+    id: todo
+    attributes:
+      label: "To do"
+      placeholder: "예: - [ ] workflow 파일 수정"

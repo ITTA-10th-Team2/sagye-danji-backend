@@ -1,0 +1,99 @@
+plugins {
+    // Java 기본 플러그인
+    id 'java'
+
+    // Spring Boot
+    id 'org.springframework.boot' version '4.0.4'
+
+    // 의존성 버전 관리
+    id 'io.spring.dependency-management' version '1.1.7'
+
+    // REST Docs (Asciidoctor 변환)
+    id 'org.asciidoctor.jvm.convert' version '4.0.5'
+}
+
+group = 'com.gyejoldanji'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        // Java 21 사용
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    // Maven 중앙 저장소
+    mavenCentral()
+}
+
+ext {
+    // REST Docs 스니펫 경로
+    set('snippetsDir', file("build/generated-snippets"))
+}
+
+dependencies {
+
+    // JPA
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // MySQL
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // Redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Spring Security
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // OAuth2
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
+
+    // Spring MVC (REST API)
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+    // Swagger (OpenAPI)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Test
+
+    // JPA 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+
+    // Redis 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
+
+    // REST Docs 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-restdocs'
+    testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+
+    // Security 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+
+    // Web 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
+    // JUnit 플랫폼 런처
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    outputs.dir snippetsDir
+    useJUnitPlatform()
+}
+
+tasks.named('asciidoctor') {
+    inputs.dir snippetsDir
+    dependsOn test
+}
