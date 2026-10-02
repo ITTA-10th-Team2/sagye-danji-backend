@@ -5,6 +5,7 @@ import com.gyejoldanji.domain.content.enums.ContentCategory;
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.enums.PhotoSource;
 import com.gyejoldanji.domain.member.entity.Member;
+import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.global.common.enums.SeasonType;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,20 @@ class DomainBehaviorTest {
 
         assertThat(member.isOnboardingCompleted()).isTrue();
         assertThat(member.getOnboardingCompletedAt()).isEqualTo(firstCompletion);
+    }
+
+    @Test
+    void createsActiveMemberAndKeepsLatestAuthentication() {
+        Member member = Member.create("TOSS_ANON", "member-1");
+        LocalDateTime firstAuthentication = LocalDateTime.of(2026, 10, 1, 3, 0);
+
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        assertThat(member.getLastLoginAt()).isNull();
+
+        member.recordAuthentication(firstAuthentication);
+        member.recordAuthentication(firstAuthentication.plusDays(1));
+
+        assertThat(member.getLastLoginAt()).isEqualTo(firstAuthentication.plusDays(1));
     }
 
     @Test
