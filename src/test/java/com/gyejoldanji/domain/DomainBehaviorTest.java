@@ -1,5 +1,6 @@
 package com.gyejoldanji.domain;
 
+import com.gyejoldanji.domain.auth.entity.AuthRefreshToken;
 import com.gyejoldanji.domain.auth.entity.AuthSession;
 import com.gyejoldanji.domain.auth.enums.SessionRevokeReason;
 import com.gyejoldanji.domain.content.entity.SeasonalContent;
@@ -140,5 +141,27 @@ class DomainBehaviorTest {
 
         assertThat(session.getRevokedAt()).isEqualTo(now.plusHours(1));
         assertThat(session.getRevokeReason()).isEqualTo(SessionRevokeReason.LOGOUT);
+    }
+
+    @Test
+    void issuesRefreshTokenWithSessionGenerationAndExpiry() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 1, 3, 0);
+        AuthSession session = AuthSession.start(
+                Member.create("TOSS_ANON", "member-1"), UUID.randomUUID(), now, Duration.ofDays(14));
+        AuthRefreshToken first = AuthRefreshToken.issue(session, new byte[32]);
+
+        first.consume(now.plusMinutes(15));
+        first.consume(now.plusMinutes(30));
+        session.advanceGeneration();
+        AuthRefreshToken second = AuthRefreshToken.issue(session, new byte[32]);
+
+        assertThat(first.getGeneration()).isZero();
+        assertThat(first.getConsumedAt()).isEqualTo(now.plusMinutes(15));
+        assertThat(second.getGeneration()).isEqualTo(1);
+        assertThat(second.getExpiresAt()).isEqualTo(session.getExpiresAt());
+        assertThat(second.getConsumedAt()).isNull();
+        assertThatThrownBy(() -> AuthRefreshToken.issue(session, new byte[31]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Refresh 토큰 해시는 32바이트여야 합니다.");
     }
 }
