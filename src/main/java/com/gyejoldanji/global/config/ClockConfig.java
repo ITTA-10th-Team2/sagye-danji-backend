@@ -18,6 +18,7 @@ import org.springframework.data.auditing.DateTimeProvider;
 @Configuration
 public class ClockConfig {
 
+    /** 서버 시간대와 관계없이 UTC 현재 시각을 제공하는 Clock을 등록한다. */
     @Bean
     public Clock clock() {
         return Clock.systemUTC();

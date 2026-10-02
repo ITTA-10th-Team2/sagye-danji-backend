@@ -13,6 +13,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.ObjectError;
 import org.springframework.validation.method.ParameterErrors;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -50,13 +51,13 @@ public class GlobalExceptionHandler {
     /**
      * {@code @RequestBody} + {@code @Valid} 검증 실패 시 처리 (400).
      *
-     * <p>예: DTO 필드의 {@code @NotBlank}, {@code @Size} 위반. 필드별 오류 목록을 응답한다. 로그에는 입력값 없이 필드명만 남긴다.
+     * <p>필드·객체 전체의 검증 오류를 응답한다. 로그에는 입력값 없이 필드명 또는 객체명만 남긴다.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     protected ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(
             MethodArgumentNotValidException e) {
         List<ErrorResponse.FieldError> fieldErrors =
-                e.getBindingResult().getFieldErrors().stream()
+                e.getBindingResult().getAllErrors().stream()
                         .map(GlobalExceptionHandler::toFieldError)
                         .toList();
         log.warn(
@@ -109,9 +110,9 @@ public class GlobalExceptionHandler {
                 e.getParameterValidationResults().stream()
                         .flatMap(
                                 result ->
-                                        // 본문 객체 전체(toString)가 value로 나가지 않게 필드 단위로 펼친다.
+                                        // 본문 객체 원문 없이 필드·객체 전체 오류를 함께 변환한다.
                                         result instanceof ParameterErrors errors
-                                                ? errors.getFieldErrors().stream()
+                                                ? errors.getAllErrors().stream()
                                                         .map(GlobalExceptionHandler::toFieldError)
                                                 : result.getResolvableErrors().stream()
                                                         .map(
@@ -195,13 +196,16 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_SERVER_ERROR));
     }
 
-    private static ErrorResponse.FieldError toFieldError(
-            org.springframework.validation.FieldError error) {
-        return ErrorResponse.FieldError.of(
-                error.getField(),
-                error.getRejectedValue(),
-                // 바인딩 실패 기본 메시지에는 입력 원문이 들어 있다.
-                error.isBindingFailure() ? "타입 변환 실패" : error.getDefaultMessage());
+    /** 필드 오류는 입력값을 마스킹하고, 객체 전체 오류는 객체 원문 없이 이름·사유만 응답한다. */
+    private static ErrorResponse.FieldError toFieldError(ObjectError error) {
+        if (error instanceof org.springframework.validation.FieldError fieldError) {
+            return ErrorResponse.FieldError.of(
+                    fieldError.getField(),
+                    fieldError.getRejectedValue(),
+                    // 바인딩 실패 기본 메시지에는 입력 원문이 들어 있다.
+                    fieldError.isBindingFailure() ? "타입 변환 실패" : fieldError.getDefaultMessage());
+        }
+        return ErrorResponse.FieldError.of(error.getObjectName(), null, error.getDefaultMessage());
     }
 
     /**

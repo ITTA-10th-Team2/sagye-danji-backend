@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ClockConfigTest {
 
+    /** Clock의 시간대와 무관하게 UTC 시각을 마이크로초 정밀도로 공급한다. */
     @Test
     void suppliesUtcTimeTruncatedToMicros() {
         // 시스템 기본 시간대와 무관하게 UTC로 공급되는지 보기 위해 KST Clock 사용
@@ -26,6 +27,7 @@ class ClockConfigTest {
         assertThat(provider.getNow()).contains(LocalDateTime.of(2026, 10, 2, 1, 2, 3, 123_456_000));
     }
 
+    /** JPA auditing 참조와 실제 UTC 공급 Bean이 연결되는지 확인한다. */
     @Test
     void auditingRefPointsToUtcProviderBean() {
         String ref = GyejolDanjiApplication.class.getAnnotation(EnableJpaAuditing.class).dateTimeProviderRef();

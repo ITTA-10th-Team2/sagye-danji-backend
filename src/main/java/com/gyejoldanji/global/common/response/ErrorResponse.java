@@ -14,7 +14,7 @@ import lombok.Getter;
 /**
  * 공통 에러 응답 DTO.
  *
- * <p>{@code success}는 항상 {@code false}이며, Validation 에러 시 {@code errors} 필드에 필드별 상세 정보가 포함된다.
+ * <p>{@code success}는 항상 {@code false}이며, 검증 오류 시 {@code errors}에 필드·객체 전체의 상세 정보가 포함된다.
  *
  * @see ErrorCode
  * @see FieldError
@@ -33,17 +33,20 @@ public class ErrorResponse {
     @Schema(description = "에러 메시지", example = "잘못된 입력값입니다.")
     private final String message;
 
-    @Schema(description = "필드별 상세 에러 목록 (Validation 에러 시)")
+    @Schema(description = "필드·객체 전체의 상세 에러 목록 (Validation 에러 시)")
     private final List<FieldError> errors;
 
+    /** 오류 코드의 기본 메시지로 응답하며 상세 오류 목록은 생략한다. */
     public static ErrorResponse of(ErrorCode errorCode) {
         return new ErrorResponse(false, errorCode.getCode(), errorCode.getMessage(), null);
     }
 
+    /** 오류 코드와 지정한 메시지로 응답한다. */
     public static ErrorResponse of(ErrorCode errorCode, String message) {
         return new ErrorResponse(false, errorCode.getCode(), message, null);
     }
 
+    /** 오류 코드의 기본 메시지와 필드·객체 전체의 검증 오류를 함께 응답한다. */
     public static ErrorResponse of(ErrorCode errorCode, List<FieldError> errors) {
         return new ErrorResponse(false, errorCode.getCode(), errorCode.getMessage(), errors);
     }
@@ -52,7 +55,7 @@ public class ErrorResponse {
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class FieldError {
 
-        @Schema(description = "에러 발생 필드명", example = "nickname")
+        @Schema(description = "에러 발생 필드명 또는 객체명", example = "nickname")
         private final String field;
 
         @Schema(description = "입력된 값", example = "")
@@ -70,6 +73,7 @@ public class ErrorResponse {
             return new FieldError(field, maskValue(field, value), reason);
         }
 
+        /** null은 빈 문자열로, 민감 필드 또는 알 수 없는 필드의 입력은 마스킹해 변환한다. */
         private static String maskValue(String field, Object value) {
             if (value == null) {
                 return "";
