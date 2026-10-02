@@ -67,10 +67,15 @@ public class AuthRefreshToken extends BaseTimeEntity {
         }
         AuthRefreshToken token = new AuthRefreshToken();
         token.session = Objects.requireNonNull(session, "session");
-        token.tokenHash = tokenHash;
+        token.tokenHash = tokenHash.clone();
         token.generation = session.getCurrentRefreshGeneration();
         token.expiresAt = session.getExpiresAt();
         return token;
+    }
+
+    /** 해시 복사본을 반환한다. 반환값을 바꿔도 엔티티는 바뀌지 않는다. */
+    public byte[] getTokenHash() {
+        return tokenHash.clone();
     }
 
     /** 갱신에 사용한 것으로 표시한다. 이미 사용한 토큰은 최초 시각을 유지한다. */

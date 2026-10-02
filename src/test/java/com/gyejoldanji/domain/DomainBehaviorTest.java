@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -163,5 +164,21 @@ class DomainBehaviorTest {
         assertThatThrownBy(() -> AuthRefreshToken.issue(session, new byte[31]))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Refresh 토큰 해시는 32바이트여야 합니다.");
+    }
+
+    @Test
+    void keepsRefreshTokenHashWhenCallerChangesArray() {
+        AuthSession session = AuthSession.start(Member.create("TOSS_ANON", "member-1"), UUID.randomUUID(),
+                LocalDateTime.of(2026, 10, 1, 3, 0), Duration.ofDays(14));
+        byte[] hash = new byte[32];
+        Arrays.fill(hash, (byte) 7);
+        AuthRefreshToken token = AuthRefreshToken.issue(session, hash);
+
+        Arrays.fill(hash, (byte) 0);
+        token.getTokenHash()[0] = 1;
+
+        byte[] expected = new byte[32];
+        Arrays.fill(expected, (byte) 7);
+        assertThat(token.getTokenHash()).isEqualTo(expected);
     }
 }
