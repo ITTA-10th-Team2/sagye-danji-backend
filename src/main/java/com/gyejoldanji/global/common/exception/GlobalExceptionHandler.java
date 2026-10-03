@@ -213,7 +213,7 @@ public class GlobalExceptionHandler {
      *
      * <p>ponytail: suppressed 예외는 버린다. 필요해지면 같은 방식으로 복사한다.
      */
-    private static Throwable withoutMessages(Throwable e) {
+    public static Throwable withoutMessages(Throwable e) {
         Throwable head = null;
         Throwable tail = null;
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
