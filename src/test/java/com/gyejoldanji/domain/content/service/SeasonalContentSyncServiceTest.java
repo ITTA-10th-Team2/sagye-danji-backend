@@ -90,11 +90,10 @@ class SeasonalContentSyncServiceTest {
         verify(sheetClient).markProcessing(2, NOW);
         verify(sheetClient).markSynced(eq(2), isNull(), eq(NOW));
         assertThat(contentCaptor.getValue().getContentCode()).isEqualTo(codeCaptor.getValue());
-        assertThat(contentCaptor.getValue().isActive()).isTrue();
     }
 
     @Test
-    void updatesAndDeactivatesExistingContent() {
+    void updatesExistingContentForReadyRow() {
         SeasonalContent content = SeasonalContent.create(
                 CONTENT_CODE, SeasonType.SPRING, ContentCategory.SCENERY,
                 "단풍", "20261001", "20261130",
@@ -109,7 +108,6 @@ class SeasonalContentSyncServiceTest {
         assertThat(content.getSeason()).isEqualTo(SeasonType.WINTER);
         assertThat(content.getCategory()).isEqualTo(ContentCategory.ACTIVITY_LIFESTYLE);
         assertThat(content.getTitle()).isEqualTo("새 제목");
-        assertThat(content.isActive()).isFalse();
         verify(repository, never()).save(any());
         verify(sheetClient).markSynced(eq(3), isNull(), eq(NOW));
     }
@@ -170,7 +168,7 @@ class SeasonalContentSyncServiceTest {
         SeasonalContentSheetRow invalidDateRow = new SeasonalContentSheetRow(
                 9, CONTENT_CODE, "AUTUMN", "SCENERY", "단풍",
                 "20261301", "20261130", "PEAK", "전국", "산림청",
-                "20260918", "단풍 보기", "단풍을 감상해요.", "TRUE",
+                "20260918", "단풍 보기", "단풍을 감상해요.",
                 SheetSyncStatus.READY, null, null, null, "");
         when(sheetClient.readRows()).thenReturn(List.of(invalidDateRow));
 
@@ -185,7 +183,7 @@ class SeasonalContentSyncServiceTest {
         SeasonalContentSheetRow calendarDateRow = new SeasonalContentSheetRow(
                 10, CONTENT_CODE, "AUTUMN", "FOOD", "단감",
                 "2026-10-01", "2026-11-30", "PEAK", "전국", "농촌진흥청",
-                "2026-09-18", "단감 맛보기", "제철 단감을 맛봐요.", "TRUE",
+                "2026-09-18", "단감 맛보기", "제철 단감을 맛봐요.",
                 SheetSyncStatus.READY, null, null, null, "");
         when(sheetClient.readRows()).thenReturn(List.of(calendarDateRow));
         when(repository.findByContentCode(CONTENT_CODE)).thenReturn(Optional.empty());
@@ -205,7 +203,7 @@ class SeasonalContentSyncServiceTest {
         SeasonalContentSheetRow blankDateRow = new SeasonalContentSheetRow(
                 11, CONTENT_CODE, "AUTUMN", "FOOD", "단감",
                 "", "", "PEAK", "전국", "농촌진흥청",
-                "", "단감 맛보기", "제철 단감을 맛봐요.", "TRUE",
+                "", "단감 맛보기", "제철 단감을 맛봐요.",
                 SheetSyncStatus.READY, null, null, null, "");
         when(sheetClient.readRows()).thenReturn(List.of(blankDateRow));
         when(repository.findByContentCode(CONTENT_CODE)).thenReturn(Optional.empty());
@@ -282,7 +280,6 @@ class SeasonalContentSyncServiceTest {
                 "20260918",
                 "새 제목",
                 "새 설명",
-                active,
                 status,
                 processingStartedAt,
                 null,

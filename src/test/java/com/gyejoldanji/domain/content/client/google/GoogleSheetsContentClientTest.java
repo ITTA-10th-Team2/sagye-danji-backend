@@ -31,13 +31,13 @@ class GoogleSheetsContentClientTest {
     void setUp() {
         SeasonalContentSyncProperties properties = new SeasonalContentSyncProperties();
         properties.setSpreadsheetId("spreadsheet-id");
-        properties.setSheetRange("contents!A2:R");
+        properties.setSheetRange("contents!A2:Q");
         client = new GoogleSheetsContentClient(gateway, properties);
     }
 
     @Test
-    void mapsAThroughRColumnsToContentRow() {
-        when(gateway.readValues("spreadsheet-id", "contents!A2:R")).thenReturn(List.of(List.of(
+    void mapsAThroughQColumnsToContentRow() {
+        when(gateway.readValues("spreadsheet-id", "contents!A2:Q")).thenReturn(List.of(List.of(
                 "ffb930c2-ac8a-409e-b0d6-1aaf30216161",
                 " AUTUMN ",
                 "SCENERY",
@@ -50,7 +50,6 @@ class GoogleSheetsContentClientTest {
                 "20260918",
                 "단풍 보기",
                 "가까운 공원에서 단풍을 감상해요.",
-                true,
                 "PROCESSING",
                 "2026-10-02T05:40:00Z",
                 "2026-10-01T04:00:00Z",
@@ -65,7 +64,6 @@ class GoogleSheetsContentClientTest {
         assertThat(row.material()).isEqualTo("단풍");
         assertThat(row.availableStartDate()).isEqualTo("20261001");
         assertThat(row.optimalPeriod()).isEqualTo("PEAK");
-        assertThat(row.active()).isEqualTo("true");
         assertThat(row.syncStatus()).isEqualTo(SheetSyncStatus.PROCESSING);
         assertThat(row.processingStartedAt()).isEqualTo(Instant.parse("2026-10-02T05:40:00Z"));
         assertThat(row.syncedAt()).isEqualTo(Instant.parse("2026-10-01T04:00:00Z"));
@@ -83,14 +81,14 @@ class GoogleSheetsContentClientTest {
         ArgumentCaptor<Map<String, List<List<Object>>>> updatesCaptor = ArgumentCaptor.forClass(Map.class);
         verify(gateway).batchUpdateValues(org.mockito.ArgumentMatchers.eq("spreadsheet-id"), updatesCaptor.capture());
         assertThat(updatesCaptor.getValue()).containsEntry(
-                "contents!N7:O7", List.of(List.of("PROCESSING", startedAt.toString())));
-        assertThat(updatesCaptor.getValue()).containsEntry("contents!R7", List.of(List.of("")));
+                "contents!M7:N7", List.of(List.of("PROCESSING", startedAt.toString())));
+        assertThat(updatesCaptor.getValue()).containsEntry("contents!Q7", List.of(List.of("")));
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void marksUnsupportedSyncStatusAsFailed() {
-        when(gateway.readValues("spreadsheet-id", "contents!A2:R")).thenReturn(List.of(List.of(
+        when(gateway.readValues("spreadsheet-id", "contents!A2:Q")).thenReturn(List.of(List.of(
                 "ffb930c2-ac8a-409e-b0d6-1aaf30216161",
                 "AUTUMN",
                 "SCENERY",
@@ -103,7 +101,6 @@ class GoogleSheetsContentClientTest {
                 "20260918",
                 "단풍 보기",
                 "가까운 공원에서 단풍을 감상해요.",
-                true,
                 "UNKNOWN"
         )));
 
@@ -113,8 +110,8 @@ class GoogleSheetsContentClientTest {
         verify(gateway).batchUpdateValues(org.mockito.ArgumentMatchers.eq("spreadsheet-id"), updatesCaptor.capture());
         assertThat(row.syncStatus()).isEqualTo(SheetSyncStatus.FAILED);
         assertThat(updatesCaptor.getValue()).containsEntry(
-                "contents!N2:O2", List.of(List.of("FAILED", "")));
+                "contents!M2:N2", List.of(List.of("FAILED", "")));
         assertThat(updatesCaptor.getValue()).containsEntry(
-                "contents!R2", List.of(List.of("동기화 상태 값이 지원되지 않습니다.")));
+                "contents!Q2", List.of(List.of("동기화 상태 값이 지원되지 않습니다.")));
     }
 }

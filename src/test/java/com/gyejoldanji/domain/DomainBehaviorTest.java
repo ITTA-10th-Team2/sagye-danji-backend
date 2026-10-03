@@ -31,7 +31,7 @@ class DomainBehaviorTest {
                 "단풍 보기", "가까운 공원에서 단풍을 감상해요.");
         assertThat(record.getMember()).isSameAs(member);
         assertThat(image.getRecord()).isSameAs(record);
-        assertThat(content.isActive()).isTrue();
+        assertThat(content.isRecommendationStatus()).isFalse();
     }
 
     @Test
@@ -77,20 +77,20 @@ class DomainBehaviorTest {
                 OptimalPeriod.PEAK, "전국", "농촌진흥청", "20260820",
                 "밤 먹기", "제철 밤을 맛봐요.");
 
-        content.deactivate();
-        assertThat(content.isActive()).isFalse();
+        content.assignRecommendation(0);
+        assertThat(content.isRecommendationStatus()).isTrue();
 
         content.update(
                 SeasonType.WINTER, ContentCategory.ACTIVITY_LIFESTYLE,
                 "눈", "20261201", "20270228",
                 OptimalPeriod.PEAK, "전국", "기상청", "20261120",
                 "눈사람 만들기", "눈사람을 만들어봐요.");
-        content.activate();
+        content.rejectRecommendation();
 
         assertThat(content.getSeason()).isEqualTo(SeasonType.WINTER);
         assertThat(content.getCategory()).isEqualTo(ContentCategory.ACTIVITY_LIFESTYLE);
         assertThat(content.getTitle()).isEqualTo("눈사람 만들기");
-        assertThat(content.isActive()).isTrue();
+        assertThat(content.isRecommendationApproved()).isFalse();
     }
 
     @Test
