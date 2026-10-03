@@ -22,3 +22,13 @@ app:
   swagger:
     server-url: http://localhost:8080
     server-description: Local
+  google-sheets:
+    enabled: ${GOOGLE_SHEETS_ENABLED:false}
+    credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
+  content-sync:
+    google-sheets:
+      spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
+      sheet-range: ${GOOGLE_SHEETS_RANGE:contents!A2:R}
+      sync-cron: ${GOOGLE_SHEETS_SYNC_CRON:0 */5 * * * *}
+      sync-zone: ${GOOGLE_SHEETS_SYNC_ZONE:Asia/Seoul}
+      processing-timeout-minutes: ${GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES:10}
