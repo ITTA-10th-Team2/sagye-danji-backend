@@ -32,7 +32,7 @@ import static org.springframework.security.web.servlet.util.matcher.PathPatternR
  *
  * <p>Content-Length가 상한을 넘으면 본문을 읽지 않고 거부한다. 그 밖에는 길이 헤더·chunked 여부와 관계없이 최대 상한+1바이트만
  * 읽어 판단하고, 상한 이하 본문만 다시 읽을 수 있게 감싸 다음 단계로 넘긴다. 필터 오류는 ControllerAdvice를 거치지 않으므로 기존
- * {@link ErrorResponse}로 직접 응답한다.
+ * {@link ErrorResponse}로 직접 응답한다. 세 POST의 모든 응답(성공·오류·413)에 캐시 금지 헤더를 먼저 둔다.
  *
  * <p>Spring Bean으로 만들지 않고 Security 체인에서만 생성하므로 Servlet 필터로 자동 등록되지 않는다.
  */
@@ -61,6 +61,9 @@ public class AuthRequestBodyLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        // 뒤 단계(MVC·ControllerAdvice)가 만드는 응답에도 남는다. Security 기본 캐시 헤더는 이미 있으면 덮지 않는다.
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+        response.setHeader(HttpHeaders.PRAGMA, "no-cache");
         if (request.getContentLengthLong() > MAX_BODY_BYTES) {
             rejectTooLarge(response);
             return;
@@ -73,14 +76,12 @@ public class AuthRequestBodyLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(new CachedBodyRequest(request, body), response);
     }
 
-    /** 413 COMMON_009를 기존 오류 JSON과 캐시 금지 헤더로 응답한다. 요청 본문은 응답·로그에 남기지 않는다. */
+    /** 413 COMMON_009를 기존 오류 JSON으로 응답한다. 요청 본문은 응답·로그에 남기지 않는다. */
     private void rejectTooLarge(HttpServletResponse response) throws IOException {
         ErrorCode errorCode = ErrorCode.REQUEST_BODY_TOO_LARGE;
         byte[] json = jsonMapper.writeValueAsBytes(ErrorResponse.of(errorCode));
         response.setStatus(errorCode.getHttpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
-        response.setHeader(HttpHeaders.PRAGMA, "no-cache");
         response.setContentLength(json.length);
         response.getOutputStream().write(json);
     }
