@@ -5,6 +5,7 @@ import com.gyejoldanji.domain.auth.entity.AuthSession;
 import com.gyejoldanji.domain.auth.enums.SessionRevokeReason;
 import com.gyejoldanji.domain.content.entity.SeasonalContent;
 import com.gyejoldanji.domain.content.enums.ContentCategory;
+import com.gyejoldanji.domain.content.enums.OptimalPeriod;
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.enums.PhotoSource;
 import com.gyejoldanji.domain.member.entity.Member;
@@ -30,7 +31,11 @@ class DomainBehaviorTest {
         Record record = Record.create(member, LocalDate.of(2026, 10, 1), SeasonType.AUTUMN, "가을");
         Image image = Image.create(record, "original/key", null, PhotoSource.CAMERA, 0);
         SeasonalContent content = SeasonalContent.create(
-                SeasonType.AUTUMN, ContentCategory.SCENERY, "단풍 보기", "가까운 공원에서 단풍을 감상해요.");
+                "1d9477ea-a0bd-4b21-b4a6-4aaf60a7f458",
+                SeasonType.AUTUMN, ContentCategory.SCENERY,
+                "단풍", "20261001", "20261130",
+                OptimalPeriod.PEAK, "전국", "산림청", "20260918",
+                "단풍 보기", "가까운 공원에서 단풍을 감상해요.");
         assertThat(record.getMember()).isSameAs(member);
         assertThat(image.getRecord()).isSameAs(record);
         assertThat(content.isActive()).isTrue();
@@ -87,16 +92,24 @@ class DomainBehaviorTest {
     @Test
     void changesSeasonalContentAndRecommendationState() {
         SeasonalContent content = SeasonalContent.create(
-                SeasonType.AUTUMN, ContentCategory.FOOD, "밤 먹기", "제철 밤을 맛봐요.");
+                "c1849166-210b-45d0-bd54-681c0147b010",
+                SeasonType.AUTUMN, ContentCategory.FOOD,
+                "밤", "20260901", "20261130",
+                OptimalPeriod.PEAK, "전국", "농촌진흥청", "20260820",
+                "밤 먹기", "제철 밤을 맛봐요.");
 
         content.deactivate();
         assertThat(content.isActive()).isFalse();
 
-        content.update(SeasonType.WINTER, ContentCategory.ACTIVITY, "눈사람 만들기", "눈사람을 만들어봐요.");
+        content.update(
+                SeasonType.WINTER, ContentCategory.ACTIVITY_LIFESTYLE,
+                "눈", "20261201", "20270228",
+                OptimalPeriod.PEAK, "전국", "기상청", "20261120",
+                "눈사람 만들기", "눈사람을 만들어봐요.");
         content.activate();
 
         assertThat(content.getSeason()).isEqualTo(SeasonType.WINTER);
-        assertThat(content.getCategory()).isEqualTo(ContentCategory.ACTIVITY);
+        assertThat(content.getCategory()).isEqualTo(ContentCategory.ACTIVITY_LIFESTYLE);
         assertThat(content.getTitle()).isEqualTo("눈사람 만들기");
         assertThat(content.isActive()).isTrue();
     }

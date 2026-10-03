@@ -28,7 +28,19 @@ public enum ErrorCode {
     INVALID_REQUEST_BODY(HttpStatus.BAD_REQUEST, "COMMON_004", "요청 본문을 파싱할 수 없습니다."),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "COMMON_005", "인증이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_006", "접근 권한이 없습니다."),
-    DUPLICATE_DATA(HttpStatus.CONFLICT, "COMMON_007", "이미 존재하는 데이터입니다.");
+    DUPLICATE_DATA(HttpStatus.CONFLICT, "COMMON_007", "이미 존재하는 데이터입니다."),
+
+    // Content Sync
+    CONTENT_SYNC_INVALID_ROW(
+            HttpStatus.BAD_REQUEST,
+            "CONTENT_001",
+            "콘텐츠 동기화 입력값이 올바르지 않습니다."),
+
+    // Google Sheets
+    GOOGLE_SHEETS_API_ERROR(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "GOOGLE_SHEETS_001",
+            "Google Sheets 연동 중 오류가 발생했습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
