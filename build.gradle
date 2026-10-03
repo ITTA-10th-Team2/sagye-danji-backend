@@ -58,6 +58,9 @@ dependencies {
     // Spring MVC (REST API)
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
+    // Bean Validation (기존에는 springdoc 경유로만 포함)
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
     // Swagger (OpenAPI)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'
 
