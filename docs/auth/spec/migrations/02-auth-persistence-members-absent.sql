@@ -1,9 +1,10 @@
 -- 02 회원 확장·영속성 — members가 아직 없는 DB용 수동 마이그레이션
 -- MySQL >= 8.0.17 / InnoDB. 자동 실행되지 않는다(Flyway·Liquibase·spring.sql.init 없음). 사람이 대상 확인 후 직접 실행한다.
--- CREATE 3개는 schema.mysql.sql(빈 DB 목표 DDL)과 같은 정의다. 한쪽을 바꾸면 다른 쪽도 함께 바꾼다.
+-- 아래 CREATE 3개가 회원·인증 테이블의 목표 정의다. 엔티티 매핑(columnDefinition·고유키·인덱스 이름)을 바꾸면 함께 바꾼다.
 --
 -- 적용 기록
---   2026-10-03 로컬 전용 MySQL 8.4.11(localhost:3307, gyejol_danji, 시작 시 테이블 0개)에 적용.
+--   2026-10-03 로컬 전용 MySQL 8.4.11(시작 시 테이블 0개인 로컬 개발 DB)에 적용.
+--   같은 날 AuthPersistenceMySqlIntegrationTest용 빈 전용 DB에도 적용해 ddl-auto=validate와 DB 동작 테스트에 사용했다.
 --   공유 개발 DB·운영 DB에는 적용하지 않았다.
 --
 -- [1] 적용 전제 — 아래를 모두 확인한 뒤에만 실행한다.
