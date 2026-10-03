@@ -3,6 +3,14 @@ package com.gyejoldanji.global.infrastructure.google;
 import com.google.api.client.http.HttpResponseException;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest;
+import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest;
+import com.google.api.services.sheets.v4.model.BooleanCondition;
+import com.google.api.services.sheets.v4.model.ClearValuesRequest;
+import com.google.api.services.sheets.v4.model.DataValidationRule;
+import com.google.api.services.sheets.v4.model.GridRange;
+import com.google.api.services.sheets.v4.model.Request;
+import com.google.api.services.sheets.v4.model.SetDataValidationRequest;
+import com.google.api.services.sheets.v4.model.Sheet;
 import com.google.api.services.sheets.v4.model.ValueRange;
 import com.gyejoldanji.global.common.exception.BusinessException;
 import com.gyejoldanji.global.common.exception.ErrorCode;
@@ -46,6 +54,56 @@ public class GoogleSheetsGateway {
                 .setValueInputOption("RAW")
                 .setData(data);
         executeWithRetry(() -> sheets.spreadsheets().values().batchUpdate(spreadsheetId, request).execute());
+    }
+
+    /** 지정한 범위의 기존 값을 삭제한다. */
+    public void clearValues(String spreadsheetId, String range) {
+        executeWithRetry(() -> sheets.spreadsheets().values()
+                .clear(spreadsheetId, range, new ClearValuesRequest())
+                .execute());
+    }
+
+    /** 지정한 행 범위에 Google Sheets 체크박스 데이터 검증을 적용한다. */
+    public void applyCheckboxValidation(
+            String spreadsheetId,
+            String sheetName,
+            int startRowNumber,
+            int endRowNumber,
+            int columnIndex
+    ) {
+        int sheetId = findSheetId(spreadsheetId, sheetName);
+        GridRange range = new GridRange()
+                .setSheetId(sheetId)
+                .setStartRowIndex(startRowNumber - 1)
+                .setEndRowIndex(endRowNumber)
+                .setStartColumnIndex(columnIndex)
+                .setEndColumnIndex(columnIndex + 1);
+        DataValidationRule rule = new DataValidationRule()
+                .setCondition(new BooleanCondition().setType("BOOLEAN"))
+                .setStrict(true)
+                .setShowCustomUi(true);
+        Request request = new Request().setSetDataValidation(
+                new SetDataValidationRequest().setRange(range).setRule(rule));
+        executeWithRetry(() -> sheets.spreadsheets().batchUpdate(
+                spreadsheetId,
+                new BatchUpdateSpreadsheetRequest().setRequests(List.of(request))).execute());
+    }
+
+    /** 시트 제목으로 내부 sheetId를 조회한다. */
+    private int findSheetId(String spreadsheetId, String sheetName) {
+        List<Sheet> sheetList = executeWithRetry(() -> sheets.spreadsheets()
+                .get(spreadsheetId)
+                .setFields("sheets.properties(sheetId,title)")
+                .execute())
+                .getSheets();
+        if (sheetList == null) {
+            throw new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR);
+        }
+        return sheetList.stream()
+                .filter(sheet -> sheetName.equals(sheet.getProperties().getTitle()))
+                .map(sheet -> sheet.getProperties().getSheetId())
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR));
     }
 
     /** 일시적 통신 오류에 제한된 지수 백오프를 적용한다. */

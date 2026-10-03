@@ -16,18 +16,11 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
-import java.time.Clock;
 
 /** 서비스 계정으로 인증된 Google Sheets SDK 객체를 구성한다. */
 @Configuration
 @ConditionalOnProperty(prefix = "app.google-sheets", name = "enabled", havingValue = "true")
 public class GoogleSheetsConfig {
-
-    /** 콘텐츠 동기화에서 사용할 UTC 기준 시계를 생성한다. */
-    @Bean
-    public Clock clock() {
-        return Clock.systemUTC();
-    }
 
     /** 읽기·쓰기가 가능한 Google Sheets SDK 객체를 생성한다. */
     @Bean

@@ -28,7 +28,14 @@ app:
   content-sync:
     google-sheets:
       spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
-      sheet-range: ${GOOGLE_SHEETS_RANGE:contents!A2:R}
+      sheet-range: ${GOOGLE_SHEETS_RANGE:contents!A2:Q}
       sync-cron: ${GOOGLE_SHEETS_SYNC_CRON:0 */5 * * * *}
       sync-zone: ${GOOGLE_SHEETS_SYNC_ZONE:Asia/Seoul}
       processing-timeout-minutes: ${GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES:10}
+  recommendation:
+    google-sheets:
+      spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
+      sheet-range: ${GOOGLE_SHEETS_RECOMMENDATION_RANGE:weekly_recommendations!A2:E}
+      generation-cron: ${GOOGLE_SHEETS_RECOMMENDATION_GENERATION_CRON:0 0 0 * * MON}
+      sync-cron: ${GOOGLE_SHEETS_RECOMMENDATION_SYNC_CRON:0 */5 * * * *}
+      zone: ${GOOGLE_SHEETS_RECOMMENDATION_ZONE:Asia/Seoul}

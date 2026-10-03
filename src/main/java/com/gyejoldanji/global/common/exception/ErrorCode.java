@@ -36,6 +36,28 @@ public enum ErrorCode {
             "CONTENT_001",
             "콘텐츠 동기화 입력값이 올바르지 않습니다."),
 
+    // Recommendation
+    RECOMMENDATION_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "RECOMMENDATION_001",
+            "오늘 노출할 추천 콘텐츠를 찾을 수 없습니다."),
+    RECOMMENDATION_CANDIDATES_INSUFFICIENT(
+            HttpStatus.CONFLICT,
+            "RECOMMENDATION_002",
+            "주간 추천 후보가 7개보다 적습니다."),
+    RECOMMENDATION_ORDER_INVALID(
+            HttpStatus.BAD_REQUEST,
+            "RECOMMENDATION_003",
+            "추천 순서는 0부터 6까지여야 합니다."),
+    RECOMMENDATION_NOT_ASSIGNED(
+            HttpStatus.CONFLICT,
+            "RECOMMENDATION_004",
+            "이번 주 추천으로 배정되지 않은 콘텐츠입니다."),
+    RECOMMENDATION_MATERIAL_NOT_UNIQUE(
+            HttpStatus.CONFLICT,
+            "RECOMMENDATION_005",
+            "추천 소재로 콘텐츠를 하나만 식별할 수 없습니다."),
+
     // Google Sheets
     GOOGLE_SHEETS_API_ERROR(
             HttpStatus.SERVICE_UNAVAILABLE,

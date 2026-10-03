@@ -175,8 +175,6 @@ public class SeasonalContentSyncService {
             throw invalidRow("활동 제목은 100자를 초과할 수 없습니다.");
         }
         String description = requireText(row.description(), "활동 설명");
-        boolean active = booleanValue(row.active());
-
         if (StringUtils.hasText(row.contentCode())) {
             try {
                 UUID.fromString(row.contentCode());
@@ -188,7 +186,7 @@ public class SeasonalContentSyncService {
                 season, category, material,
                 availableStartDate, availableEndDate, optimalPeriod,
                 region, timingSource, sourceCheckedDate,
-                title, description, active);
+                title, description);
     }
 
     /** 비어 있는 콘텐츠 코드를 발급하고 시트에 먼저 기록한다. */
@@ -227,18 +225,13 @@ public class SeasonalContentSyncService {
         return content;
     }
 
-    /** 검증된 입력값과 활성 상태를 엔티티에 반영한다. */
+    /** 검증된 입력값을 엔티티에 반영한다. */
     private void applyInput(SeasonalContent content, ContentInput input) {
         content.update(
                 input.season(), input.category(), input.material(),
                 input.availableStartDate(), input.availableEndDate(), input.optimalPeriod(),
                 input.region(), input.timingSource(), input.sourceCheckedDate(),
                 input.title(), input.description());
-        if (input.active()) {
-            content.activate();
-        } else {
-            content.deactivate();
-        }
     }
 
     /** 시트 실패 상태 기록 오류가 전체 실행으로 전파되지 않게 격리한다. */
@@ -259,18 +252,6 @@ public class SeasonalContentSyncService {
         } catch (IllegalArgumentException exception) {
             throw invalidRow(fieldName + " 값이 지원되지 않습니다.", exception);
         }
-    }
-
-    /** TRUE 또는 FALSE 입력을 Boolean 값으로 변환한다. */
-    private boolean booleanValue(String value) {
-        String validated = requireText(value, "활성 여부").toUpperCase(Locale.ROOT);
-        if ("TRUE".equals(validated)) {
-            return true;
-        }
-        if ("FALSE".equals(validated)) {
-            return false;
-        }
-        throw invalidRow("활성 여부는 TRUE 또는 FALSE여야 합니다.");
     }
 
     /** 선택적 날짜를 검증하고 DB 저장 형식인 yyyyMMdd로 정규화한다. */
@@ -346,8 +327,7 @@ public class SeasonalContentSyncService {
             String timingSource,
             String sourceCheckedDate,
             String title,
-            String description,
-            boolean active
+            String description
     ) {
     }
 }

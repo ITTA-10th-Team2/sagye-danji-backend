@@ -74,22 +74,22 @@ public class GoogleSheetsContentClient implements SeasonalContentSheetClient {
     @Override
     public void markProcessing(int rowNumber, Instant processingStartedAt) {
         Map<String, List<List<Object>>> updates = new LinkedHashMap<>();
-        updates.put(cellRange("N:O", rowNumber), singleRow(
+        updates.put(cellRange("M:N", rowNumber), singleRow(
                 SheetSyncStatus.PROCESSING.name(), processingStartedAt.toString()));
-        updates.put(cellRange("R", rowNumber), singleRow(""));
+        updates.put(cellRange("Q", rowNumber), singleRow(""));
         update(updates);
     }
 
     /** 중단된 행을 다시 처리 가능한 상태로 복구한다. */
     @Override
     public void markReady(int rowNumber) {
-        update(Map.of(cellRange("N:O", rowNumber), singleRow(SheetSyncStatus.READY.name(), "")));
+        update(Map.of(cellRange("M:N", rowNumber), singleRow(SheetSyncStatus.READY.name(), "")));
     }
 
     /** DB 반영이 완료된 행에 결과를 기록한다. */
     @Override
     public void markSynced(int rowNumber, Long dbId, Instant syncedAt) {
-        update(Map.of(cellRange("N:R", rowNumber), singleRow(
+        update(Map.of(cellRange("M:Q", rowNumber), singleRow(
                 SheetSyncStatus.SYNCED.name(), "", syncedAt.toString(),
                 Objects.requireNonNull(dbId, "dbId"), "")));
     }
@@ -98,8 +98,8 @@ public class GoogleSheetsContentClient implements SeasonalContentSheetClient {
     @Override
     public void markFailed(int rowNumber, String errorMessage) {
         Map<String, List<List<Object>>> updates = new LinkedHashMap<>();
-        updates.put(cellRange("N:O", rowNumber), singleRow(SheetSyncStatus.FAILED.name(), ""));
-        updates.put(cellRange("R", rowNumber), singleRow(errorMessage));
+        updates.put(cellRange("M:N", rowNumber), singleRow(SheetSyncStatus.FAILED.name(), ""));
+        updates.put(cellRange("Q", rowNumber), singleRow(errorMessage));
         update(updates);
     }
 
@@ -119,17 +119,16 @@ public class GoogleSheetsContentClient implements SeasonalContentSheetClient {
                 text(cells, 9),
                 text(cells, 10),
                 text(cells, 11),
-                text(cells, 12),
                 status(cells, rowNumber),
-                instant(cells, 14, rowNumber, "processing_started_at"),
-                instant(cells, 15, rowNumber, "synced_at"),
-                longValue(cells, 16, rowNumber),
-                text(cells, 17));
+                instant(cells, 13, rowNumber, "processing_started_at"),
+                instant(cells, 14, rowNumber, "synced_at"),
+                longValue(cells, 15, rowNumber),
+                text(cells, 16));
     }
 
     /** 상태 셀을 Enum으로 변환하고 잘못된 값은 처리 대상에서 제외한다. */
     private SheetSyncStatus status(List<Object> cells, int rowNumber) {
-        String value = text(cells, 13);
+        String value = text(cells, 12);
         if (!StringUtils.hasText(value)) {
             return SheetSyncStatus.DRAFT;
         }
