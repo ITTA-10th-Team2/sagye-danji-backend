@@ -42,3 +42,15 @@ app:
       sync-cron: ${GOOGLE_SHEETS_SYNC_CRON:0 */5 * * * *}
       sync-zone: ${GOOGLE_SHEETS_SYNC_ZONE:Asia/Seoul}
       processing-timeout-minutes: ${GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES:10}
+# 자체 JWT·세션 설정(AuthProperties). jwt 값과 키 파일이 없거나 잘못되면 애플리케이션이 시작되지 않는다.
+# 키 경로는 실행 환경(컨테이너) 안의 PEM 파일 경로다. 키 파일은 Git에 넣지 않는다.
+auth:
+  jwt:
+    # 미해결 placeholder는 문자열 그대로 바인딩되므로 빈 기본값을 둬 @NotBlank가 누락을 거부하게 한다.
+    issuer: ${AUTH_JWT_ISSUER:}
+    audience: ${AUTH_JWT_AUDIENCE:}
+    key-id: ${AUTH_JWT_KEY_ID:}
+    private-key-path: ${AUTH_JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${AUTH_JWT_PUBLIC_KEY_PATH:}
+  access-ttl-seconds: ${AUTH_ACCESS_TTL_SECONDS:900}
+  session-ttl-seconds: ${AUTH_SESSION_TTL_SECONDS:1209600}
