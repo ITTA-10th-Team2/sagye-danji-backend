@@ -148,8 +148,8 @@ class SeasonalContentSyncServiceTest {
 
         service.synchronize();
 
-        verify(sheetClient).markReady(6);
-        verify(sheetClient).markProcessing(6, NOW);
+        verify(sheetClient, never()).markReady(6);
+        verify(sheetClient, never()).markProcessing(eq(6), any(Instant.class));
         verify(sheetClient).markSynced(eq(6), isNull(), eq(NOW));
     }
 
@@ -231,7 +231,9 @@ class SeasonalContentSyncServiceTest {
             if (readCount.getAndIncrement() == 0) {
                 return List.of(firstRow);
             }
-            return List.of(row(8, issuedCode.get(), "AUTUMN", "SCENERY", "TRUE", SheetSyncStatus.READY, null));
+            return List.of(row(
+                    8, issuedCode.get(), "AUTUMN", "SCENERY", "TRUE",
+                    SheetSyncStatus.PROCESSING, NOW.minusSeconds(601)));
         });
         doAnswer(invocation -> {
             issuedCode.set(invocation.getArgument(1));
@@ -253,7 +255,8 @@ class SeasonalContentSyncServiceTest {
 
         verify(repository, times(1)).save(any(SeasonalContent.class));
         verify(sheetClient, times(2)).markSynced(eq(8), isNull(), eq(NOW));
-        verify(sheetClient).markFailed(8, "동기화 처리 중 오류가 발생했습니다.");
+        verify(sheetClient, never()).markFailed(eq(8), anyString());
+        verify(sheetClient, never()).markReady(8);
     }
 
     private SeasonalContentSheetRow row(

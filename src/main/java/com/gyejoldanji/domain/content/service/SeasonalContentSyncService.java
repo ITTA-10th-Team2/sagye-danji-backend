@@ -78,10 +78,31 @@ public class SeasonalContentSyncService {
             return row;
         }
 
-        Instant expiresAt = row.processingStartedAt() == null
-                ? Instant.MIN
-                : row.processingStartedAt().plus(Duration.ofMinutes(properties.getProcessingTimeoutMinutes()));
+        if (row.processingStartedAt() == null) {
+            markFailed(row.rowNumber(), "처리 시작 시각이 없어 자동 복구할 수 없습니다.");
+            return null;
+        }
+
+        Instant expiresAt = row.processingStartedAt()
+                .plus(Duration.ofMinutes(properties.getProcessingTimeoutMinutes()));
         if (expiresAt.isAfter(now)) {
+            return null;
+        }
+
+        if (!StringUtils.hasText(row.contentCode())) {
+            markFailed(row.rowNumber(), "콘텐츠 코드가 없어 자동 복구할 수 없습니다.");
+            return null;
+        }
+
+        try {
+            SeasonalContent appliedContent = repository.findByContentCode(row.contentCode()).orElse(null);
+            if (appliedContent != null) {
+                markSyncedOrKeepProcessing(row.rowNumber(), row.contentCode(), appliedContent);
+                return null;
+            }
+        } catch (RuntimeException exception) {
+            log.warn("PROCESSING 행의 DB 반영 여부 확인에 실패했습니다. row={}, contentCode={}, errorType={}",
+                    row.rowNumber(), safeCode(row.contentCode()), exception.getClass().getSimpleName());
             return null;
         }
 
@@ -98,18 +119,42 @@ public class SeasonalContentSyncService {
     /** 한 행을 검증하고 선점한 뒤 DB와 시트에 결과를 반영한다. */
     private void synchronizeRow(SeasonalContentSheetRow row, Instant now) {
         SeasonalContentSheetRow processingRow = row;
+        ContentInput input;
+        String contentCode;
+
         try {
-            ContentInput input = validate(row);
-            String contentCode = resolveContentCode(row);
+            input = validate(row);
+            contentCode = resolveContentCode(row);
             processingRow = row.withContentCode(contentCode);
             sheetClient.markProcessing(row.rowNumber(), now);
-
-            SeasonalContent content = upsert(contentCode, input);
-            sheetClient.markSynced(row.rowNumber(), content.getId(), clock.instant());
         } catch (RuntimeException exception) {
             log.warn("시트 행 동기화에 실패했습니다. row={}, contentCode={}, errorType={}",
                     row.rowNumber(), safeCode(processingRow.contentCode()), exception.getClass().getSimpleName());
             markFailed(row.rowNumber(), toSafeErrorMessage(exception));
+            return;
+        }
+
+        SeasonalContent content;
+        try {
+            content = upsert(contentCode, input);
+        } catch (RuntimeException exception) {
+            log.warn("콘텐츠 DB 반영에 실패했습니다. row={}, contentCode={}, errorType={}",
+                    row.rowNumber(), safeCode(contentCode), exception.getClass().getSimpleName());
+            markFailed(row.rowNumber(), toSafeErrorMessage(exception));
+            return;
+        }
+
+        markSyncedOrKeepProcessing(row.rowNumber(), contentCode, content);
+    }
+
+    /** DB 반영 결과를 시트에 기록하고, 실패하면 PROCESSING 상태를 유지한다. */
+    private void markSyncedOrKeepProcessing(int rowNumber, String contentCode, SeasonalContent content) {
+        try {
+            sheetClient.markSynced(rowNumber, content.getId(), clock.instant());
+        } catch (RuntimeException exception) {
+            log.warn("DB 반영 후 시트 결과 기록에 실패해 PROCESSING 상태를 유지합니다. "
+                            + "row={}, contentCode={}, dbId={}, errorType={}",
+                    rowNumber, safeCode(contentCode), content.getId(), exception.getClass().getSimpleName());
         }
     }
 

@@ -6,7 +6,7 @@ public enum SheetSyncStatus {
     DRAFT,
     /** 동기화 요청이 완료된 상태. */
     READY,
-    /** 백엔드가 처리 중인 상태. */
+    /** 백엔드가 처리 중이거나, DB 반영 후 시트 결과 기록을 재시도해야 하는 상태. */
     PROCESSING,
     /** DB 반영이 완료된 상태. */
     SYNCED,
