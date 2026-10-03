@@ -17,12 +17,34 @@ $env:DB_PASSWORD = 'your_db_password'
 .\gradlew.bat bootRun
 ```
 
-`.env` 파일은 자동으로 로드되지 않습니다. 위 환경변수 또는 IDE 실행 설정을 사용하세요.
+프로젝트 루트의 `.env`는 `application.yml`의 선택적 import를 통해 자동으로 로드됩니다. 운영 환경에서는 `.env` 대신 배포 환경변수나 보안 저장소 사용을 권장합니다.
 
 - API 확인: http://localhost:8080/api/test/response
 - Swagger: http://localhost:8080/swagger-ui/index.html
 - 컴파일 및 JAR 생성: `.\gradlew.bat assemble testClasses`
 - 테스트 실행: `.\gradlew.bat test` (위 MySQL 접속 설정 필요)
+
+### Google Sheets 콘텐츠 동기화
+
+Google Sheets 연동은 기본적으로 비활성화되며 `GOOGLE_SHEETS_ENABLED=true`일 때 5분 주기로 실행됩니다. 서비스 계정 JSON과 실제 시트 ID는 저장소에 커밋하지 않습니다.
+
+```dotenv
+GOOGLE_SHEETS_ENABLED=false
+GOOGLE_SHEETS_SPREADSHEET_ID=
+GOOGLE_SHEETS_RANGE=contents!A2:R
+GOOGLE_SHEETS_SYNC_CRON=0 */5 * * * *
+GOOGLE_SHEETS_SYNC_ZONE=Asia/Seoul
+GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES=10
+GOOGLE_APPLICATION_CREDENTIALS=
+GOOGLE_SERVICE_ACCOUNT_JSON_PATH=
+```
+
+- `GOOGLE_APPLICATION_CREDENTIALS`: IntelliJ 또는 `bootRun`에서 읽을 서비스 계정 JSON의 절대 경로
+- `GOOGLE_SERVICE_ACCOUNT_JSON_PATH`: Docker Compose가 컨테이너에 읽기 전용으로 마운트할 같은 JSON의 호스트 경로
+- 시트 데이터 범위의 컬럼 순서: `콘텐츠코드`, `계절`, `카테고리`, `소재`, `사용가능시작일`, `사용가능종료일`, `최적시기`, `지역`, `시기출처`, `출처확인일`, `제목`, `설명`, `활성여부`, `동기화상태`, `처리시작시각`, `동기화시각`, `DB_ID`, `오류메시지`
+- 서비스 계정 이메일에 대상 스프레드시트 편집 권한을 공유해야 합니다.
+- DB만 실행: `docker compose -f docker-compose.local.yml up -d mysql`
+- 앱까지 실행: 먼저 `.\gradlew.bat bootJar`로 JAR을 만든 뒤 `docker compose -f docker-compose.local.yml --profile app up -d --build`
 
 GitHub Project 연결과 팀 공유 문서 주소는 생성 후 설정하세요.
 
