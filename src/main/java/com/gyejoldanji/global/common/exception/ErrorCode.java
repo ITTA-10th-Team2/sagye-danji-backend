@@ -29,6 +29,7 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "COMMON_005", "인증이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_006", "접근 권한이 없습니다."),
     DUPLICATE_DATA(HttpStatus.CONFLICT, "COMMON_007", "이미 존재하는 데이터입니다."),
+    REQUEST_BODY_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "COMMON_009", "요청 본문이 너무 큽니다."),
 
     // Content Sync
     CONTENT_SYNC_INVALID_ROW(
