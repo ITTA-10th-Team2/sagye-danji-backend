@@ -29,7 +29,16 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "COMMON_005", "인증이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_006", "접근 권한이 없습니다."),
     DUPLICATE_DATA(HttpStatus.CONFLICT, "COMMON_007", "이미 존재하는 데이터입니다."),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "COMMON_008", "일시적으로 서비스를 이용할 수 없습니다."),
     REQUEST_BODY_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "COMMON_009", "요청 본문이 너무 큽니다."),
+
+    // Auth
+    AUTH_CODE_REJECTED(HttpStatus.UNAUTHORIZED, "AUTH_004", "사용자 인증을 다시 시도해 주세요."),
+    AUTH_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_007", "사용자 인증 연결을 일시적으로 사용할 수 없습니다."),
+    MEMBER_INACTIVE(HttpStatus.FORBIDDEN, "AUTH_008", "현재 이용할 수 없는 계정입니다."),
+    AUTH_PROVIDER_BAD_RESPONSE(HttpStatus.BAD_GATEWAY, "AUTH_010", "사용자 인증 응답을 처리할 수 없습니다."),
+    AUTH_PROVIDER_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AUTH_012", "사용자 인증 응답 시간이 초과되었습니다."),
+    AUTH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "AUTH_014", "요청이 많습니다. 잠시 후 다시 시도해 주세요."),
 
     // Content Sync
     CONTENT_SYNC_INVALID_ROW(

@@ -42,6 +42,7 @@ app:
       sync-cron: ${GOOGLE_SHEETS_SYNC_CRON:0 */5 * * * *}
       sync-zone: ${GOOGLE_SHEETS_SYNC_ZONE:Asia/Seoul}
       processing-timeout-minutes: ${GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES:10}
+
 # 자체 JWT·세션 설정(AuthProperties). jwt 값과 키 파일이 없거나 잘못되면 애플리케이션이 시작되지 않는다.
 # 키 경로는 실행 환경(컨테이너) 안의 PEM 파일 경로다. 키 파일은 Git에 넣지 않는다.
 auth:
@@ -54,3 +55,15 @@ auth:
     public-key-path: ${AUTH_JWT_PUBLIC_KEY_PATH:}
   access-ttl-seconds: ${AUTH_ACCESS_TTL_SECONDS:900}
   session-ttl-seconds: ${AUTH_SESSION_TTL_SECONDS:1209600}
+
+# 토스 익명 키 교환 설정(TossProperties). 필수값이 없으면 애플리케이션이 시작되지 않는다(빈 기본값 = 누락 검증).
+# keystore는 미니앱 client 개인키·인증서 체인이 든 PKCS#12이며 JWT 서명키와 별개다. 파일·암호는 Git에 넣지 않는다.
+toss:
+  api-base-url: ${TOSS_API_BASE_URL:https://apps-in-toss-api.toss.im}
+  app-name: ${TOSS_APP_NAME:}
+  identity-environment: ${TOSS_IDENTITY_ENVIRONMENT:}
+  mtls:
+    keystore-path: ${TOSS_MTLS_KEYSTORE_PATH:}
+    keystore-password: ${TOSS_MTLS_KEYSTORE_PASSWORD:}
+  connect-timeout-seconds: ${TOSS_CONNECT_TIMEOUT_SECONDS:3}
+  request-timeout-seconds: ${TOSS_REQUEST_TIMEOUT_SECONDS:5}
