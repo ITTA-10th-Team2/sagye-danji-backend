@@ -8,6 +8,11 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # DB_URL의 serverTimezone과 관계없이 드라이버 해석·MySQL 세션 시간대를 UTC로 고정한다.
+      data-source-properties:
+        connectionTimeZone: "+00:00"
+        forceConnectionTimeZoneToSession: true
 
   jpa:
     hibernate:
@@ -17,6 +22,11 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          time_zone: UTC
+        # LocalDateTime을 JVM 시간대로 변환하지 않고 드라이버에 그대로 전달한다(배포 JVM TZ=Asia/Seoul 대응).
+        type:
+          java_time_use_direct_jdbc: true
 
 app:
   swagger:
@@ -39,3 +49,28 @@ app:
       generation-cron: ${GOOGLE_SHEETS_RECOMMENDATION_GENERATION_CRON:0 0 0 * * MON}
       sync-cron: ${GOOGLE_SHEETS_RECOMMENDATION_SYNC_CRON:0 */5 * * * *}
       zone: ${GOOGLE_SHEETS_RECOMMENDATION_ZONE:Asia/Seoul}
+
+# 자체 JWT·세션 설정(AuthProperties). jwt 값과 키 파일이 없거나 잘못되면 애플리케이션이 시작되지 않는다.
+# 키 경로는 실행 환경(컨테이너) 안의 PEM 파일 경로다. 키 파일은 Git에 넣지 않는다.
+auth:
+  jwt:
+    # 미해결 placeholder는 문자열 그대로 바인딩되므로 빈 기본값을 둬 @NotBlank가 누락을 거부하게 한다.
+    issuer: ${AUTH_JWT_ISSUER:}
+    audience: ${AUTH_JWT_AUDIENCE:}
+    key-id: ${AUTH_JWT_KEY_ID:}
+    private-key-path: ${AUTH_JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${AUTH_JWT_PUBLIC_KEY_PATH:}
+  access-ttl-seconds: ${AUTH_ACCESS_TTL_SECONDS:900}
+  session-ttl-seconds: ${AUTH_SESSION_TTL_SECONDS:1209600}
+
+# 토스 익명 키 교환 설정(TossProperties). 필수값이 없으면 애플리케이션이 시작되지 않는다(빈 기본값 = 누락 검증).
+# keystore는 미니앱 client 개인키·인증서 체인이 든 PKCS#12이며 JWT 서명키와 별개다. 파일·암호는 Git에 넣지 않는다.
+toss:
+  api-base-url: ${TOSS_API_BASE_URL:https://apps-in-toss-api.toss.im}
+  app-name: ${TOSS_APP_NAME:}
+  identity-environment: ${TOSS_IDENTITY_ENVIRONMENT:}
+  mtls:
+    keystore-path: ${TOSS_MTLS_KEYSTORE_PATH:}
+    keystore-password: ${TOSS_MTLS_KEYSTORE_PASSWORD:}
+  connect-timeout-seconds: ${TOSS_CONNECT_TIMEOUT_SECONDS:3}
+  request-timeout-seconds: ${TOSS_REQUEST_TIMEOUT_SECONDS:5}

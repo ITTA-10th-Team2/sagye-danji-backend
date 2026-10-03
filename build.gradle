@@ -55,6 +55,9 @@ dependencies {
     // OAuth2
     implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
 
+    // OAuth2 Resource Server (자체 JWT 발급·검증)
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+
     // Spring MVC (REST API)
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
