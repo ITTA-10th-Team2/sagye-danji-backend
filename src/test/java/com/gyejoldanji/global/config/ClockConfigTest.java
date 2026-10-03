@@ -3,6 +3,7 @@ package com.gyejoldanji.global.config;
 import com.gyejoldanji.GyejolDanjiApplication;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.data.auditing.DateTimeProvider;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
@@ -11,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,6 +36,24 @@ class ClockConfigTest {
 
         try (var context = new AnnotationConfigApplicationContext(ClockConfig.class)) {
             assertThat(context.getBean(ref)).isInstanceOf(DateTimeProvider.class);
+            assertThat(context.getBean(Clock.class).getZone()).isEqualTo(ZoneOffset.UTC);
+        }
+    }
+
+    /** Google Sheets 연동을 켜도 공통 UTC Clock 하나를 재사용한다. */
+    @Test
+    void sharesClockWhenGoogleSheetsIsEnabled() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.setAllowBeanDefinitionOverriding(false);
+            context.getEnvironment().getPropertySources().addFirst(
+                    new MapPropertySource("test", Map.of("app.google-sheets.enabled", true)));
+            // 실제 인증 파일과 외부 통신 없이 두 설정의 Bean 등록을 검증한다.
+            context.addBeanFactoryPostProcessor(factory ->
+                    factory.getBeanDefinition("googleSheets").setLazyInit(true));
+            context.register(ClockConfig.class, GoogleSheetsConfig.class);
+            context.refresh();
+
+            assertThat(context.getBeansOfType(Clock.class)).containsOnlyKeys("clock");
             assertThat(context.getBean(Clock.class).getZone()).isEqualTo(ZoneOffset.UTC);
         }
     }
