@@ -57,12 +57,23 @@ public class ServiceTokenService {
     }
 
     /**
-     * 세션의 Access 토큰과 최초 Refresh 토큰을 만든다.
+     * 응답 TTL이 1초 미만이라 발급하지 않았다. 서명 실패 등 다른 내부 오류와 구분하려고 따로 둔다. 익명 인증(신규 세션)은 기존대로 500,
+     * Refresh(기존 세션)는 401 AUTH_003으로 처리한다.
+     */
+    public static final class InsufficientTtlException extends IllegalStateException {
+
+        InsufficientTtlException() {
+            super("발급할 토큰의 남은 수명이 1초 미만입니다.");
+        }
+    }
+
+    /**
+     * 세션의 Access 토큰과 새 Refresh 토큰을 만든다(최초 발급·회전 공통).
      *
      * <p>Access 만료는 {@code min(now + accessTtl, sessionExpiresAt)}를 정수 초로 내린 값이며, 응답 TTL은 그 내림 결과로
      * 계산한다(고정 900 아님). 둘 중 하나라도 1초 미만이면 발급하지 않는다.
      *
-     * @throws IllegalStateException 응답 TTL이 1초 미만일 때
+     * @throws InsufficientTtlException 응답 TTL이 1초 미만일 때
      */
     public IssuedTokens issue(long memberId, String sessionKey, Instant now, Instant sessionExpiresAt) {
         Instant accessExpiry = now.plusSeconds(properties.getAccessTtlSeconds());
@@ -71,7 +82,7 @@ public class ServiceTokenService {
         long expiresIn = Duration.between(now, expiresAt).getSeconds();
         long refreshExpiresIn = Duration.between(now, sessionExpiresAt).getSeconds();
         if (expiresIn < 1 || refreshExpiresIn < 1) {
-            throw new IllegalStateException("발급할 토큰의 남은 수명이 1초 미만입니다.");
+            throw new InsufficientTtlException();
         }
 
         Instant issuedAt = Instant.ofEpochSecond(now.getEpochSecond());
@@ -100,8 +111,8 @@ public class ServiceTokenService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    /** 응답하는 Refresh 원문 문자열의 UTF-8 바이트를 해싱한다(난수 바이트 자체가 아니다). */
-    private static byte[] sha256(String refreshToken) {
+    /** 응답하는 Refresh 원문 문자열의 UTF-8 바이트를 해싱한다(난수 바이트 자체가 아니다). 저장과 Refresh 조회가 같은 계산을 쓴다. */
+    static byte[] sha256(String refreshToken) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(refreshToken.getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException e) {

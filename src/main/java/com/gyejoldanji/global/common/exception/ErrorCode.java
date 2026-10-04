@@ -37,6 +37,8 @@ public enum ErrorCode {
     AUTH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_002", "유효하지 않은 인증 정보입니다."),
     AUTH_SESSION_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_003", "종료되었거나 사용할 수 없는 세션입니다."),
     AUTH_CODE_REJECTED(HttpStatus.UNAUTHORIZED, "AUTH_004", "사용자 인증을 다시 시도해 주세요."),
+    AUTH_REFRESH_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_005", "세션 유지 정보가 유효하지 않습니다."),
+    AUTH_REFRESH_REUSED(HttpStatus.UNAUTHORIZED, "AUTH_006", "세션 유지 정보가 재사용되어 세션이 종료되었습니다."),
     AUTH_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_007", "사용자 인증 연결을 일시적으로 사용할 수 없습니다."),
     MEMBER_INACTIVE(HttpStatus.FORBIDDEN, "AUTH_008", "현재 이용할 수 없는 계정입니다."),
     AUTH_PROVIDER_BAD_RESPONSE(HttpStatus.BAD_GATEWAY, "AUTH_010", "사용자 인증 응답을 처리할 수 없습니다."),

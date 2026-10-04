@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 
+import com.gyejoldanji.domain.auth.service.ServiceTokenService.InsufficientTtlException;
 import com.gyejoldanji.domain.auth.service.ServiceTokenService.IssuedTokens;
 import com.gyejoldanji.global.config.TestJwtKeys;
 import com.gyejoldanji.global.config.properties.AuthProperties;
@@ -16,6 +17,8 @@ import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -93,12 +96,26 @@ class ServiceTokenServiceTest {
         assertThat(tokens.refreshExpiresIn()).isEqualTo(300);
     }
 
-    /** 내림 결과 응답 TTL이 1초 미만이면 발급하지 않는다. */
-    @Test
-    void refusesWhenResponseTtlIsBelowOneSecond() {
+    /**
+     * 내림 결과 응답 TTL이 1초 미만이면 발급하지 않는다. 다른 내부 오류와 구분되는 전용 예외이며 기존 IllegalStateException 계열이다.
+     * 세션이 1.1초 남아도 Access exp가 정수 초로 내려가 expiresIn이 0이면 거부한다.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-10-03T12:00:01.400000Z", "2026-10-03T12:00:01.600000Z", "2026-10-03T12:00:00.500000Z",
+            "2026-10-03T12:00:00.000001Z"})
+    void refusesWhenResponseTtlIsBelowOneSecond(String sessionEnd) {
         assertThatIllegalStateException()
-                .isThrownBy(() -> service.issue(1L, SESSION_KEY, NOW, Instant.parse("2026-10-03T12:00:01.400000Z")));
-        assertThatIllegalStateException().isThrownBy(() -> service.issue(1L, SESSION_KEY, NOW, NOW));
+                .isThrownBy(() -> service.issue(1L, SESSION_KEY, NOW, Instant.parse(sessionEnd)))
+                .isExactlyInstanceOf(InsufficientTtlException.class);
+    }
+
+    /** 두 응답 TTL이 모두 1초가 되는 가장 짧은 경우는 발급한다. */
+    @Test
+    void issuesWhenBothResponseTtlsAreOneSecond() {
+        IssuedTokens tokens = service.issue(1L, SESSION_KEY, NOW, Instant.parse("2026-10-03T12:00:02.000000Z"));
+
+        assertThat(tokens.expiresIn()).isOne();
+        assertThat(tokens.refreshExpiresIn()).isOne();
     }
 
     /** Refresh는 43자 Base64url(32바이트)이고, 해시는 응답 원문 문자열 UTF-8의 SHA-256이다. */
@@ -113,7 +130,21 @@ class ServiceTokenServiceTest {
         assertThat(tokens.refreshTokenHash())
                 .hasSize(32)
                 .isEqualTo(sha256.digest(tokens.refreshToken().getBytes(StandardCharsets.UTF_8)))
-                .isNotEqualTo(sha256.digest(randomBytes));
+                .isNotEqualTo(sha256.digest(randomBytes))
+                .isEqualTo(ServiceTokenService.sha256(tokens.refreshToken()));
+    }
+
+    /** Refresh 조회 해시도 받은 문자열 그대로의 UTF-8 SHA-256이다. 대소문자를 바꾸거나 Base64를 다시 인코딩하지 않는다. */
+    @Test
+    void hashesLookupStringAsIs() throws Exception {
+        String raw = "A".repeat(42) + "B"; // 정규형이 아닌 Base64url(남는 비트가 0이 아님). 디코딩하면 "A"*43과 같은 바이트다.
+        MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+
+        assertThat(Base64.getUrlDecoder().decode(raw)).isEqualTo(Base64.getUrlDecoder().decode("A".repeat(43)));
+        assertThat(ServiceTokenService.sha256(raw))
+                .isEqualTo(sha256.digest(raw.getBytes(StandardCharsets.UTF_8)))
+                .isNotEqualTo(ServiceTokenService.sha256(raw.toLowerCase()))
+                .isNotEqualTo(ServiceTokenService.sha256("A".repeat(43)));
     }
 
     /** 발급마다 Access(jti 포함)·Refresh·해시가 모두 다르다. */
