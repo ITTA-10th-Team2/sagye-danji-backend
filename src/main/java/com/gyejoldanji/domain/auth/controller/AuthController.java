@@ -5,6 +5,7 @@ import com.gyejoldanji.domain.auth.dto.AnonymousAuthResponse;
 import com.gyejoldanji.domain.auth.dto.RefreshRequest;
 import com.gyejoldanji.domain.auth.dto.RefreshResponse;
 import com.gyejoldanji.domain.auth.service.AnonymousAuthService;
+import com.gyejoldanji.domain.auth.service.SessionLogoutService;
 import com.gyejoldanji.domain.auth.service.TokenRefreshService;
 import com.gyejoldanji.domain.auth.toss.TossAnonymousAuthClient;
 import com.gyejoldanji.global.common.response.ApiResponse;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 익명 인증·Refresh API.
+ * 익명 인증·Refresh·로그아웃 API.
  *
  * <p>본문 크기 제한·캐시 금지 헤더는 Security 체인의 본문 제한 필터가, 입력·오류 응답 형식은 기존 검증과 GlobalExceptionHandler가
  * 맡는다. Bearer 헤더는 보지 않는다(본문 code·Refresh로만 인증).
@@ -34,6 +35,7 @@ public class AuthController {
 
     private final AnonymousAuthService anonymousAuthService;
     private final TokenRefreshService tokenRefreshService;
+    private final SessionLogoutService sessionLogoutService;
 
     /** 토스 일회용 code로 회원 세션을 만들고 자체 Access·Refresh 토큰을 발급한다. */
     @PostMapping("/anonymous")
@@ -45,6 +47,16 @@ public class AuthController {
     @PostMapping("/refresh")
     public ApiResponse<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return ApiResponse.ok(tokenRefreshService.refresh(request.refreshToken()));
+    }
+
+    /**
+     * 본문 Refresh가 속한 세션 하나만 종료한다. Access가 없거나 만료돼도 호출할 수 있다. 입력은 Refresh와 같다. 이미 종료됐거나 없는
+     * 세션도 200이며, 응답 시점에는 commit이 끝나 있다.
+     */
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@Valid @RequestBody RefreshRequest request) {
+        sessionLogoutService.logout(request.refreshToken());
+        return ApiResponse.ok("세션이 종료되었습니다.");
     }
 
     /** 토스 요청 한도 초과(429 AUTH_014). 검증된 대기 초가 있을 때만 Retry-After로 전달한다. */

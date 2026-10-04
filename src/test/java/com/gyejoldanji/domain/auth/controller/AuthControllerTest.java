@@ -7,6 +7,7 @@ import com.gyejoldanji.domain.auth.dto.RefreshRequest;
 import com.gyejoldanji.domain.auth.dto.RefreshResponse;
 import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
 import com.gyejoldanji.domain.auth.service.AnonymousAuthService;
+import com.gyejoldanji.domain.auth.service.SessionLogoutService;
 import com.gyejoldanji.domain.auth.service.TokenRefreshService;
 import com.gyejoldanji.domain.auth.toss.TossAnonymousAuthClient;
 import com.gyejoldanji.global.common.exception.BusinessException;
@@ -29,6 +30,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -37,6 +39,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -49,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 실제 anonymous·refresh endpoint의 입력·본문 제한·응답 형식·오류 매핑·헤더·마스킹을 운영 Security 체인과 기존 오류 처리로 검증한다.
+ * 실제 anonymous·refresh·logout endpoint의 입력·본문 제한·응답 형식·오류 매핑·헤더·마스킹을 운영 Security 체인과 기존 오류 처리로 검증한다.
  *
  * <p>서비스는 대체한다(외부 호출·DB 없음). 서비스 내부와 실제 DB는 각 서비스 테스트와 MySQL 통합 테스트에서 검증한다. 세 인증 경로
  * 공통의 본문 제한(chunked 포함)·체인·CORS는 각 필터·체인 테스트가 맡는다.
@@ -63,11 +66,14 @@ class AuthControllerTest {
     private static final String REFRESH_PATH = "/api/auth/refresh";
     /** 형식에 맞는 43자 Refresh 원문. */
     private static final String SECRET_REFRESH = "SECRET-refresh_0123456789abcdefghijklmnopqr";
+    private static final String LOGOUT_PATH = "/api/auth/logout";
 
     @MockitoBean
     private AnonymousAuthService anonymousAuthService;
     @MockitoBean
     private TokenRefreshService tokenRefreshService;
+    @MockitoBean
+    private SessionLogoutService sessionLogoutService;
     /** 보호 체인의 세션 필터용. 인증 체인은 Bearer를 보지 않으므로 호출되지 않아야 한다. */
     @MockitoBean
     private AuthSessionRepository sessionRepository;
@@ -362,6 +368,107 @@ class AuthControllerTest {
     static Stream<Arguments> refreshErrors() {
         return Stream.of(ErrorCode.AUTH_REFRESH_INVALID, ErrorCode.AUTH_REFRESH_REUSED, ErrorCode.AUTH_SESSION_INVALID,
                 ErrorCode.SERVICE_UNAVAILABLE, ErrorCode.INTERNAL_SERVER_ERROR).map(Arguments::of);
+    }
+
+    /**
+     * 로그아웃 성공은 정확히 {success, code, message} 세 필드다(data·토큰 없음). Access 없이·잘못된 Bearer·다른 인증 헤더가 붙어도 본문
+     * Refresh 원문 그대로 서비스에 넘기고 추가 필드(회원·세션 ID 등)는 무시한다. Bearer 검증·세션 조회를 하지 않는다.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "Bearer not-a-valid-token", "Bearer eyJhbGciOiJub25lIn0.e30.", "Basic dXNlcjpwYXNz"})
+    void logoutReturnsExactMessage(String authorization, CapturedOutput output) throws Exception {
+        var request = post(LOGOUT_PATH).contentType(APPLICATION_JSON).content("{\"refreshToken\":\"" + SECRET_REFRESH
+                + "\",\"memberId\":\"99\",\"sessionId\":7,\"allDevices\":true,\"code\":\"c\"}");
+        if (!authorization.isEmpty()) {
+            request.header("Authorization", authorization);
+        }
+        mockMvc.perform(request)
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", containsString("application/json")))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(header().doesNotExist("WWW-Authenticate"))
+                .andExpect(content().json("{\"success\":true,\"code\":\"200\",\"message\":\"세션이 종료되었습니다.\"}",
+                        JsonCompareMode.STRICT));
+
+        verify(sessionLogoutService).logout(SECRET_REFRESH);
+        verifyNoInteractions(anonymousAuthService, tokenRefreshService, sessionRepository);
+        assertThat(output.getAll()).doesNotContain(SECRET_REFRESH);
+    }
+
+    /** 패턴에 맞는 값은 trim·대소문자 변환·Base64 정규화 없이 그대로 넘긴다. */
+    @ParameterizedTest
+    @MethodSource("acceptedRefreshTokens")
+    void logoutPassesTokenUnchanged(String refreshToken) throws Exception {
+        postLogout("{\"refreshToken\":\"" + refreshToken + "\"}").andExpect(status().isOk());
+
+        verify(sessionLogoutService).logout(refreshToken);
+    }
+
+    /** 입력 결정표는 Refresh와 같다(COMMON_004/COMMON_001). 서비스(DB)를 부르지 않고 오류에도 캐시 금지 헤더가 있다. */
+    @ParameterizedTest
+    @MethodSource("invalidRefreshBodies")
+    void logoutRejectsInvalidInputWithoutCallingService(String body, String code) throws Exception {
+        postLogout(body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"));
+
+        verifyNoInteractions(sessionLogoutService);
+    }
+
+    /** 패턴 오류 응답의 value는 가려지고 응답·로그에 원문이 없다. */
+    @Test
+    void logoutMasksRejectedValue(CapturedOutput output) throws Exception {
+        postLogout("{\"refreshToken\":\"" + SECRET_REFRESH + "x\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_001"))
+                .andExpect(jsonPath("$.errors[0].field").value("refreshToken"))
+                .andExpect(jsonPath("$.errors[0].value").value("[REDACTED]"))
+                .andExpect(content().string(not(containsString(SECRET_REFRESH))));
+
+        verifyNoInteractions(sessionLogoutService);
+        assertThat(output.getAll()).doesNotContain(SECRET_REFRESH);
+    }
+
+    /** 16,384바이트 초과 본문은 파싱 전에 413이며 서비스를 부르지 않는다. */
+    @Test
+    void logoutRejectsOversizedBodyBeforeParsing() throws Exception {
+        postLogout("{\"refreshToken\":\"" + SECRET_REFRESH + "\",\"pad\":\"" + "a".repeat(16_384) + "\"}")
+                .andExpect(status().is(413))
+                .andExpect(jsonPath("$.code").value("COMMON_009"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"));
+
+        verifyNoInteractions(sessionLogoutService);
+    }
+
+    /** DB 장애·commit 실패는 200이 아니라 서비스가 분류한 503/500이며 캐시 금지 헤더가 있다. 인증 체인이라 WWW-Authenticate는 없다. */
+    @ParameterizedTest
+    @MethodSource("logoutErrors")
+    void logoutMapsServiceErrors(ErrorCode errorCode, CapturedOutput output) throws Exception {
+        doThrow(new BusinessException(errorCode)).when(sessionLogoutService).logout(anyString());
+
+        postLogout("{\"refreshToken\":\"" + SECRET_REFRESH + "\"}")
+                .andExpect(status().is(errorCode.getHttpStatus().value()))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(errorCode.getCode()))
+                .andExpect(jsonPath("$.message").value(errorCode.getMessage()))
+                .andExpect(header().doesNotExist("WWW-Authenticate"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"));
+
+        assertThat(output.getAll()).doesNotContain(SECRET_REFRESH);
+    }
+
+    static Stream<Arguments> logoutErrors() {
+        return Stream.of(ErrorCode.SERVICE_UNAVAILABLE, ErrorCode.INTERNAL_SERVER_ERROR).map(Arguments::of);
+    }
+
+    private ResultActions postLogout(String body) throws Exception {
+        return mockMvc.perform(post(LOGOUT_PATH).contentType(APPLICATION_JSON).content(body));
     }
 
     private ResultActions postRefresh(String body) throws Exception {
