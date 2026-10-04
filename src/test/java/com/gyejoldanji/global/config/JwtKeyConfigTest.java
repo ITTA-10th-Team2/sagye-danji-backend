@@ -58,7 +58,7 @@ class JwtKeyConfigTest {
         publicPem = TestJwtKeys.writePem(dir, "PUBLIC KEY", rsa.getPublic().getEncoded());
     }
 
-    /** 필수값과 같은 RSA 2048 키쌍이 있으면 기동하고 TTL 기본값은 900초·14일이다. */
+    /** 필수값과 같은 RSA 2048 키쌍이 있으면 기동하고 TTL 기본값은 900초·14일, 만료 이력 보관 기본값은 7일이다. */
     @Test
     void startsWithValidKeyPairAndDefaults() {
         runner.withPropertyValues(TestJwtKeys.properties(privatePem, publicPem)).run(context -> {
@@ -68,6 +68,7 @@ class JwtKeyConfigTest {
             AuthProperties properties = context.getBean(AuthProperties.class);
             assertThat(properties.getAccessTtlSeconds()).isEqualTo(900);
             assertThat(properties.getSessionTtlSeconds()).isEqualTo(1_209_600);
+            assertThat(properties.getExpiredSessionRetentionDays()).isEqualTo(7);
         });
     }
 
@@ -91,7 +92,7 @@ class JwtKeyConfigTest {
                 .run(context -> assertInvalidSetting(context, field));
     }
 
-    /** 실제 application.yml placeholder로 바인딩해도 환경변수가 모두 있으면 기동하고 TTL은 yml 기본값을 쓴다. */
+    /** 실제 application.yml placeholder로 바인딩해도 환경변수가 모두 있으면 기동하고 TTL·보관 기간은 yml 기본값을 쓴다. */
     @Test
     void startsFromApplicationYamlWithJwtEnvironmentVariables() {
         yamlRunner(jwtEnvironment()).run(context -> {
@@ -102,7 +103,26 @@ class JwtKeyConfigTest {
             assertThat(properties.getJwt().getKeyId()).isEqualTo("test-key");
             assertThat(properties.getAccessTtlSeconds()).isEqualTo(900);
             assertThat(properties.getSessionTtlSeconds()).isEqualTo(1_209_600);
+            assertThat(properties.getExpiredSessionRetentionDays()).isEqualTo(7);
         });
+    }
+
+    /** 만료 이력 보관 기간은 application.yml의 AUTH_EXPIRED_SESSION_RETENTION_DAYS로 바꾼다. */
+    @Test
+    void bindsRetentionDaysFromEnvironmentVariable() {
+        Map<String, Object> environment = jwtEnvironment();
+        environment.put("AUTH_EXPIRED_SESSION_RETENTION_DAYS", "30");
+        yamlRunner(environment).run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AuthProperties.class).getExpiredSessionRetentionDays()).isEqualTo(30);
+        });
+    }
+
+    /** 보관 기간은 1일 이상이다. 0 이하는 만료 직후나 미만료 세션까지 정리 대상이 되므로 기동하지 않는다. 상한은 두지 않는다. */
+    @ParameterizedTest
+    @CsvSource({"-1, false", "0, false", "1, true", "7, true", "36500, true"})
+    void limitsRetentionDays(int days, boolean valid) {
+        assertTtl(valid, "auth.expired-session-retention-days=" + days);
     }
 
     /** 키 파일이 정상이어도 application.yml의 필수 JWT 환경변수가 하나라도 없으면 기동하지 않는다. */

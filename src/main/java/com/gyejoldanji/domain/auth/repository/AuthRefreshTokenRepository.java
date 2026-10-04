@@ -4,6 +4,7 @@ import com.gyejoldanji.domain.auth.entity.AuthRefreshToken;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,4 +37,12 @@ public interface AuthRefreshTokenRepository extends JpaRepository<AuthRefreshTok
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from AuthRefreshToken t where t.tokenHash = :hash")
     Optional<AuthRefreshToken> findByTokenHashForUpdate(@Param("hash") byte[] hash);
+
+    /**
+     * 정리할 세션 하나의 Refresh 이력(현재·소비 모두)을 삭제하고 삭제 행 수를 반환한다. 그 세션을 먼저 잠근 정리 트랜잭션에서만 호출한다.
+     * 세션 단위로 지워 (session_id, generation) 인덱스로 그 세션의 이력만 잠근다.
+     */
+    @Modifying
+    @Query(value = "DELETE FROM auth_refresh_tokens WHERE session_id = :sessionId", nativeQuery = true)
+    int deleteBySessionId(@Param("sessionId") Long sessionId);
 }
