@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: 'optional:file:.env[.properties]'
   application:
     name: GYEJOL-DANJI
   datasource:
@@ -6,6 +8,11 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # DB_URL의 serverTimezone과 관계없이 드라이버 해석·MySQL 세션 시간대를 UTC로 고정한다.
+      data-source-properties:
+        connectionTimeZone: "+00:00"
+        forceConnectionTimeZoneToSession: true
 
   jpa:
     hibernate:
@@ -15,8 +22,67 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          time_zone: UTC
+        # LocalDateTime을 JVM 시간대로 변환하지 않고 드라이버에 그대로 전달한다(배포 JVM TZ=Asia/Seoul 대응).
+        type:
+          java_time_use_direct_jdbc: true
 
 app:
   swagger:
     server-url: http://localhost:8080
     server-description: Local
+  # 브라우저 요청을 허용할 실제 FE Origin(AppProperties, 쉼표 구분). 비면 기동 실패. wildcard·자리표시자는 거부하며
+  # toss.identity-environment=PROD에서는 https 실제 주소만 받는다(localhost 불가).
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+  google-sheets:
+    enabled: ${GOOGLE_SHEETS_ENABLED:false}
+    credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
+  content-sync:
+    google-sheets:
+      spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
+      sheet-range: ${GOOGLE_SHEETS_RANGE:contents!A2:Q}
+      sync-cron: ${GOOGLE_SHEETS_SYNC_CRON:0 */5 * * * *}
+      sync-zone: ${GOOGLE_SHEETS_SYNC_ZONE:Asia/Seoul}
+      processing-timeout-minutes: ${GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES:10}
+  recommendation:
+    google-sheets:
+      spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
+      sheet-range: ${GOOGLE_SHEETS_RECOMMENDATION_RANGE:weekly_recommendations!A2:E}
+      generation-cron: ${GOOGLE_SHEETS_RECOMMENDATION_GENERATION_CRON:0 0 0 * * MON}
+      sync-cron: ${GOOGLE_SHEETS_RECOMMENDATION_SYNC_CRON:0 */5 * * * *}
+      zone: ${GOOGLE_SHEETS_RECOMMENDATION_ZONE:Asia/Seoul}
+
+# 자체 JWT·세션 설정(AuthProperties). jwt 값과 키 파일이 없거나 잘못되면 애플리케이션이 시작되지 않는다.
+# 키 경로는 실행 환경(컨테이너) 안의 PEM 파일 경로다. 키 파일은 Git에 넣지 않는다.
+auth:
+  jwt:
+    # 미해결 placeholder는 문자열 그대로 바인딩되므로 빈 기본값을 둬 @NotBlank가 누락을 거부하게 한다.
+    issuer: ${AUTH_JWT_ISSUER:}
+    audience: ${AUTH_JWT_AUDIENCE:}
+    key-id: ${AUTH_JWT_KEY_ID:}
+    private-key-path: ${AUTH_JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${AUTH_JWT_PUBLIC_KEY_PATH:}
+  access-ttl-seconds: ${AUTH_ACCESS_TTL_SECONDS:900}
+  session-ttl-seconds: ${AUTH_SESSION_TTL_SECONDS:1209600}
+  # 세션 만료 뒤 이 기간(일)이 지나면 매일 03:00 UTC 정리가 세션·Refresh 이력을 삭제한다. 1 이상.
+  expired-session-retention-days: ${AUTH_EXPIRED_SESSION_RETENTION_DAYS:7}
+
+# 토스 익명 키 교환 설정(TossProperties). 필수값이 없으면 애플리케이션이 시작되지 않는다(빈 기본값 = 누락 검증).
+# keystore는 미니앱 client 개인키·인증서 체인이 든 PKCS#12이며 JWT 서명키와 별개다. 파일·암호는 Git에 넣지 않는다.
+toss:
+  api-base-url: ${TOSS_API_BASE_URL:https://apps-in-toss-api.toss.im}
+  app-name: ${TOSS_APP_NAME:}
+  identity-environment: ${TOSS_IDENTITY_ENVIRONMENT:}
+  mtls:
+    keystore-path: ${TOSS_MTLS_KEYSTORE_PATH:}
+    keystore-password: ${TOSS_MTLS_KEYSTORE_PASSWORD:}
+  connect-timeout-seconds: ${TOSS_CONNECT_TIMEOUT_SECONDS:3}
+  request-timeout-seconds: ${TOSS_REQUEST_TIMEOUT_SECONDS:5}
+
+# Hibernate SQL 오류 logger는 드라이버 메시지 원문을 WARN으로 남긴다(예: Duplicate entry '<Refresh 해시 바이트>').
+# 오류 코드 줄과 같은 수준이라 이 logger만 끈다. 오류 타입·스택은 서비스·GlobalExceptionHandler가 메시지 없이 남긴다.
+logging:
+  level:
+    org.hibernate.orm.jdbc.error: "off"

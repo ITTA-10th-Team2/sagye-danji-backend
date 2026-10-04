@@ -17,13 +17,27 @@ public class BusinessException extends RuntimeException {
 
     private final ErrorCode errorCode;
 
+    /** 에러 코드의 기본 메시지로 비즈니스 예외를 생성한다. */
     public BusinessException(ErrorCode errorCode) {
         super(errorCode.getMessage());
         this.errorCode = errorCode;
     }
 
+    /** 에러 코드와 사용자 정의 메시지로 비즈니스 예외를 생성한다. */
     public BusinessException(ErrorCode errorCode, String message) {
         super(message);
+        this.errorCode = errorCode;
+    }
+
+    /** 에러 코드와 원인 예외로 비즈니스 예외를 생성한다. */
+    public BusinessException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode.getMessage(), cause);
+        this.errorCode = errorCode;
+    }
+
+    /** 에러 코드·사용자 정의 메시지·원인 예외로 비즈니스 예외를 생성한다. */
+    public BusinessException(ErrorCode errorCode, String message, Throwable cause) {
+        super(message, cause);
         this.errorCode = errorCode;
     }
 }

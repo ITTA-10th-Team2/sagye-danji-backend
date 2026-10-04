@@ -55,8 +55,18 @@ dependencies {
     // OAuth2
     implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
 
+    // OAuth2 Resource Server (자체 JWT 발급·검증)
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+
     // Spring MVC (REST API)
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+    // Configuration validation
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Google Sheets
+    implementation 'com.google.apis:google-api-services-sheets:v4-rev20260921-2.0.0'
+    implementation 'com.google.auth:google-auth-library-oauth2-http:1.54.0'
 
     // Swagger (OpenAPI)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'

@@ -1,8 +1,15 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   mysql:
     image: mysql:8.0
     container_name: mysql
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: gyejol_danji
@@ -25,10 +32,29 @@ services:
     image: shlee811/sagye-danji-backend:latest
     container_name: app
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       DB_URL: jdbc:mysql://mysql:3306/gyejol_danji?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       TZ: Asia/Seoul
+      GOOGLE_SHEETS_ENABLED: ${GOOGLE_SHEETS_ENABLED:-false}
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-}
+      GOOGLE_SHEETS_RANGE: ${GOOGLE_SHEETS_RANGE:-contents!A2:Q}
+      GOOGLE_SHEETS_SYNC_CRON: "${GOOGLE_SHEETS_SYNC_CRON:-0 */5 * * * *}"
+      GOOGLE_SHEETS_SYNC_ZONE: ${GOOGLE_SHEETS_SYNC_ZONE:-Asia/Seoul}
+      GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES: ${GOOGLE_SHEETS_PROCESSING_TIMEOUT_MINUTES:-10}
+      GOOGLE_SHEETS_RECOMMENDATION_RANGE: ${GOOGLE_SHEETS_RECOMMENDATION_RANGE:-weekly_recommendations!A2:E}
+      GOOGLE_SHEETS_RECOMMENDATION_GENERATION_CRON: "${GOOGLE_SHEETS_RECOMMENDATION_GENERATION_CRON:-0 0 0 * * MON}"
+      GOOGLE_SHEETS_RECOMMENDATION_SYNC_CRON: "${GOOGLE_SHEETS_RECOMMENDATION_SYNC_CRON:-0 */5 * * * *}"
+      GOOGLE_SHEETS_RECOMMENDATION_ZONE: ${GOOGLE_SHEETS_RECOMMENDATION_ZONE:-Asia/Seoul}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-service-account.json
+    volumes:
+      - type: bind
+        source: ${GOOGLE_SERVICE_ACCOUNT_JSON_PATH}
+        target: /run/secrets/google-service-account.json
+        read_only: true
+      - ./secrets/jwt:/run/secrets/jwt:ro
+      - ./secrets/toss:/run/secrets/toss:ro
     depends_on:
       mysql:
         condition: service_healthy
@@ -37,6 +63,7 @@ services:
     image: nginx:1.27-alpine
     container_name: nginx
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"

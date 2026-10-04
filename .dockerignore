@@ -4,3 +4,6 @@
 out
 *.iml
 .env
+secrets
+google-service-account*.json
+*service-account-key*.json
