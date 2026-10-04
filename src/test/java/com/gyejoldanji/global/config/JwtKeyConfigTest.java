@@ -49,7 +49,7 @@ class JwtKeyConfigTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(ConfigurationPropertiesAutoConfiguration.class))
-            .withUserConfiguration(AuthProperties.class, JwtKeyConfig.class);
+            .withUserConfiguration(AuthProperties.class, ClockConfig.class, JwtKeyConfig.class);
 
     @BeforeAll
     static void createKeys() throws Exception {

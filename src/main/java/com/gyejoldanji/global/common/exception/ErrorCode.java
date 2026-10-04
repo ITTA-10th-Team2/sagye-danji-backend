@@ -33,6 +33,9 @@ public enum ErrorCode {
     REQUEST_BODY_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "COMMON_009", "요청 본문이 너무 큽니다."),
 
     // Auth
+    AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_001", "인증 정보가 만료되었습니다."),
+    AUTH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_002", "유효하지 않은 인증 정보입니다."),
+    AUTH_SESSION_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_003", "종료되었거나 사용할 수 없는 세션입니다."),
     AUTH_CODE_REJECTED(HttpStatus.UNAUTHORIZED, "AUTH_004", "사용자 인증을 다시 시도해 주세요."),
     AUTH_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_007", "사용자 인증 연결을 일시적으로 사용할 수 없습니다."),
     MEMBER_INACTIVE(HttpStatus.FORBIDDEN, "AUTH_008", "현재 이용할 수 없는 계정입니다."),
