@@ -86,4 +86,12 @@ public class Image {
         image.sortOrder = sortOrder;
         return image;
     }
+
+    /** 같은 기록 안에서 이미지의 표시 순서를 변경한다. */
+    public void changeSortOrder(int sortOrder) {
+        if (sortOrder < 0) {
+            throw new IllegalArgumentException("이미지 표시 순서는 0 이상이어야 합니다.");
+        }
+        this.sortOrder = sortOrder;
+    }
 }
