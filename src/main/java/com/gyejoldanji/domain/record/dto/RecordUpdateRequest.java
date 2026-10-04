@@ -24,7 +24,8 @@ public record RecordUpdateRequest(
         @CodePointLength(max = 100)
         String memo,
 
-        @Schema(description = "수정 후 최종 이미지 목록. null 또는 생략하면 기존 이미지 유지", nullable = true)
+        @Schema(description = "수정 후 최종 이미지 목록. null 또는 생략하면 기존 이미지를 유지하며, "
+                + "전달할 경우 각 항목에 type을 반드시 포함해야 함", nullable = true)
         @Size(max = 10)
         List<@Valid ImageItem> images
 ) {
@@ -32,11 +33,13 @@ public record RecordUpdateRequest(
     /** 기존 이미지 유지 또는 신규 이미지 추가를 표현하는 최종 이미지 항목. */
     @Schema(description = "수정 후 이미지 항목")
     public record ImageItem(
-            @Schema(description = "기존 이미지 유지 또는 신규 이미지 추가", example = "EXISTING")
+            @Schema(description = "필수 이미지 처리 유형. EXISTING은 기존 이미지 유지, NEW는 신규 이미지 추가",
+                    example = "EXISTING", allowableValues = {"EXISTING", "NEW"}, requiredMode = Schema.RequiredMode.REQUIRED)
             @NotNull
             Type type,
 
-            @Schema(description = "EXISTING일 때 현재 기록에 속한 이미지 ID", example = "502", nullable = true)
+            @Schema(description = "EXISTING일 때 현재 기록에 속한 실제 이미지 ID. 기록 응답의 images[].id 사용",
+                    example = "1", nullable = true)
             @Positive
             Long imageId,
 

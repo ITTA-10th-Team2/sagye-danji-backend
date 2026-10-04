@@ -7,8 +7,10 @@ import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
 import com.gyejoldanji.global.common.enums.SeasonType;
+import com.gyejoldanji.global.security.CurrentMember;
 import com.gyejoldanji.global.security.SecurityTestConfig;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,7 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RecordControllerTest {
 
     private static final String SID = UUID.randomUUID().toString();
-    private static final String RECORDS = "/api/v1/records";
+    private static final String RECORDS = "/api/records";
 
     @MockitoBean
     private AuthSessionRepository sessionRepository;
@@ -162,6 +164,21 @@ class RecordControllerTest {
                 assertThat(method.getAnnotation(ApiResponses.class)).as(method.getName()).isNotNull();
             }
         }
+    }
+
+    @Test
+    void documentsUpdateImageTypeInRequestExamples() throws Exception {
+        Method update = RecordController.class.getDeclaredMethod("update", CurrentMember.class, Long.class,
+                com.gyejoldanji.domain.record.dto.RecordUpdateRequest.class,
+                jakarta.servlet.http.HttpServletResponse.class);
+        io.swagger.v3.oas.annotations.parameters.RequestBody requestBody = update.getParameters()[2]
+                .getAnnotation(io.swagger.v3.oas.annotations.parameters.RequestBody.class);
+
+        assertThat(requestBody).isNotNull();
+        assertThat(requestBody.content()[0].examples())
+                .extracting(ExampleObject::value)
+                .anySatisfy(value -> assertThat(value).contains("\"type\": \"EXISTING\"", "\"type\": \"NEW\""))
+                .anySatisfy(value -> assertThat(value).doesNotContain("\"images\""));
     }
 
     private static RecordResponse response() {

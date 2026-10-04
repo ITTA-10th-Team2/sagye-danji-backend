@@ -10,6 +10,7 @@ import com.gyejoldanji.global.security.CurrentMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -80,8 +81,47 @@ public class RecordController {
     @PatchMapping("/{recordId}")
     public ApiResponse<RecordResponse> update(
             @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
-            @Parameter(description = "수정할 양수 기록 ID", example = "101")
+            @Parameter(description = "수정할 양수 기록 ID. 기록 생성 응답의 data.id 사용", example = "1")
             @PathVariable @Positive Long recordId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "images를 생략하면 기존 이미지를 유지합니다. images를 보내면 수정 후 최종 이미지 목록을 "
+                            + "전달해야 하며, 각 항목의 type은 필수입니다.",
+                    content = @Content(
+                            schema = @Schema(implementation = RecordUpdateRequest.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "이미지 변경 없이 날짜와 메모만 수정",
+                                            summary = "images를 생략하여 기존 이미지 유지",
+                                            value = """
+                                                    {
+                                                      "recordDate": "2026-10-05",
+                                                      "memo": "메모만 수정했어요"
+                                                    }
+                                                    """),
+                                    @ExampleObject(
+                                            name = "기존 이미지 유지 및 신규 이미지 추가",
+                                            summary = "EXISTING과 NEW를 함께 사용하는 수정",
+                                            value = """
+                                                    {
+                                                      "recordDate": "2026-10-05",
+                                                      "memo": "사진 순서를 수정했어요",
+                                                      "images": [
+                                                        {
+                                                          "type": "EXISTING",
+                                                          "imageId": 1,
+                                                          "sortOrder": 0
+                                                        },
+                                                        {
+                                                          "type": "NEW",
+                                                          "objectKey": "record-images/42/2026/10/new-image.jpg",
+                                                          "source": "GALLERY",
+                                                          "sortOrder": 1
+                                                        }
+                                                      ]
+                                                    }
+                                                    """)
+                            }))
             @Valid @RequestBody RecordUpdateRequest request,
             HttpServletResponse response) {
         noStore(response);
@@ -103,7 +143,7 @@ public class RecordController {
     @DeleteMapping("/{recordId}")
     public ApiResponse<Void> delete(
             @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
-            @Parameter(description = "삭제할 양수 기록 ID", example = "101")
+            @Parameter(description = "삭제할 양수 기록 ID. 기록 생성 응답의 data.id 사용", example = "1")
             @PathVariable @Positive Long recordId,
             HttpServletResponse response) {
         noStore(response);

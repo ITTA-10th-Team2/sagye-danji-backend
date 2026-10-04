@@ -15,7 +15,7 @@ import java.util.List;
 /** 저장을 마친 기록과 이미지 메타데이터를 반환하는 command 응답. */
 @Schema(description = "기록 생성·수정 결과")
 public record RecordResponse(
-        @Schema(description = "기록 ID", example = "101") Long id,
+        @Schema(description = "기록 ID. 수정·삭제 API의 recordId로 사용", example = "1") Long id,
         @Schema(description = "기록 날짜", example = "2026-10-04") LocalDate recordDate,
         @Schema(description = "기록 날짜에서 서버가 계산한 계절", example = "AUTUMN") SeasonType season,
         @Schema(description = "기록 메모", example = "가을밤 산책 🍂", nullable = true) String memo,
@@ -39,7 +39,7 @@ public record RecordResponse(
     /** command 응답에 필요한 이미지 ID와 표시 정보. */
     @Schema(description = "저장된 이미지 메타데이터")
     public record ImageResponse(
-            @Schema(description = "이미지 ID", example = "501") Long id,
+            @Schema(description = "이미지 ID. 수정 요청의 EXISTING imageId로 사용", example = "1") Long id,
             @Schema(description = "이미지 입력 경로", example = "CAMERA") PhotoSource source,
             @Schema(description = "기록 안의 표시 순서", example = "0") int sortOrder
     ) {
