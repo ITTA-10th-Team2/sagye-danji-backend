@@ -12,11 +12,18 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Clock;
 import java.util.Base64;
 
 import com.gyejoldanji.global.config.properties.AuthProperties;
+import com.gyejoldanji.global.security.AccessTokenValidator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtTypeValidator;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /**
  * 자체 JWT(RS256) 서명 키쌍을 기동 시 읽고 검증한다.
@@ -42,6 +49,21 @@ public class JwtKeyConfig {
             throw new IllegalStateException("JWT 개인키와 공개키가 같은 키쌍이 아닙니다.");
         }
         return new KeyPair(publicKey, privateKey);
+    }
+
+    /**
+     * 현재 공개키·RS256으로만 서명을 확인하는 Access JWT 디코더. 토큰 헤더의 jku·jwk 등으로 다른 키를 가져오지 않는다.
+     *
+     * <p>기본 검증(60초 clock skew 포함)을 {@link AccessTokenValidator}로 바꾸고, 기본 검증의 typ 검사(JWT 또는 생략)는 유지한다.
+     */
+    @Bean
+    public JwtDecoder jwtDecoder(KeyPair jwtKeyPair, AuthProperties properties, Clock clock) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey((RSAPublicKey) jwtKeyPair.getPublic())
+                .signatureAlgorithm(SignatureAlgorithm.RS256)
+                .build();
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtTypeValidator.jwt(), new AccessTokenValidator(properties.getJwt(), clock)));
+        return decoder;
     }
 
     private static RSAPrivateKey readPrivateKey(String location) {

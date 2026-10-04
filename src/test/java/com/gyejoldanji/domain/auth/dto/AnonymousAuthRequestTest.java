@@ -3,8 +3,8 @@ package com.gyejoldanji.domain.auth.dto;
 import java.util.List;
 import java.util.Map;
 
-import com.gyejoldanji.global.common.exception.GlobalExceptionHandler;
-import com.gyejoldanji.global.config.SecurityConfig;
+import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
+import com.gyejoldanji.global.security.SecurityTestConfig;
 import jakarta.validation.Valid;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,19 +14,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.http.converter.autoconfigure.HttpMessageConvertersAutoConfiguration;
-import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.validation.autoconfigure.ValidationAutoConfiguration;
-import org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration;
-import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -51,7 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * anonymous 입력 계약(T23 입력 부분)을 실제 Boot JSON 바인딩 → {@code @Valid} → 기존 오류 처리와 운영 Security 체인(본문 제한
  * 필터 포함)으로 검증한다.
  *
- * <p>웹·Jackson·Validation·Security 자동 설정만 올리고 DB·토스·JWT는 쓰지 않는다. 컨트롤러는 이 테스트 전용이다.
+ * <p>{@link SecurityTestConfig}(웹·Jackson·Validation·Security·JWT test 키)만 올리고 DB·토스는 쓰지 않는다. 컨트롤러는 이
+ * 테스트 전용이다.
  */
 @SpringBootTest(classes = AnonymousAuthRequestTest.TestApplication.class)
 @ExtendWith(OutputCaptureExtension.class)
@@ -70,6 +66,15 @@ class AnonymousAuthRequestTest {
 
     @Autowired
     private Validator validator;
+
+    /** 보호 체인의 세션 필터용. 인증 체인 요청에서는 호출되지 않는다. */
+    @MockitoBean
+    private AuthSessionRepository sessionRepository;
+
+    @DynamicPropertySource
+    static void properties(DynamicPropertyRegistry registry) throws Exception {
+        SecurityTestConfig.register(registry);
+    }
 
     private MockMvc mockMvc;
 
@@ -219,10 +224,13 @@ class AnonymousAuthRequestTest {
         assertThat(output).doesNotContain(SECRET).doesNotContain(numericSecret);
     }
 
-    /** 인증 DTO 밖의 기존 JSON 동작(숫자→문자열 자동 변환)은 바뀌지 않는다. */
+    /**
+     * 인증 DTO 밖의 기존 JSON 동작(숫자→문자열 자동 변환)은 바뀌지 않는다. 보호 체인은 이 test 경로를 거부하므로 바인딩만 보려고
+     * Security 필터 없이 보낸다.
+     */
     @Test
     void keepsDefaultJsonBehaviorForOtherDtos() throws Exception {
-        mockMvc.perform(post("/test/general").contentType(APPLICATION_JSON).content("{\"name\":123,\"unknown\":1}"))
+        MockMvcBuilders.webAppContextSetup(context).build().perform(post("/test/general").contentType(APPLICATION_JSON).content("{\"name\":123,\"unknown\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.received").value("123"));
     }
@@ -240,15 +248,7 @@ class AnonymousAuthRequestTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    @ImportAutoConfiguration({
-            DispatcherServletAutoConfiguration.class,
-            WebMvcAutoConfiguration.class,
-            HttpMessageConvertersAutoConfiguration.class,
-            JacksonAutoConfiguration.class,
-            ValidationAutoConfiguration.class,
-            SecurityAutoConfiguration.class,
-            ServletWebSecurityAutoConfiguration.class})
-    @Import({SecurityConfig.class, GlobalExceptionHandler.class, TestController.class})
+    @Import({SecurityTestConfig.class, TestController.class})
     static class TestApplication {
     }
 

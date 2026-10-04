@@ -9,10 +9,14 @@ import com.gyejoldanji.global.common.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionTimedOutException;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.method.ParameterErrors;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -206,6 +210,14 @@ public class GlobalExceptionHandler {
                     fieldError.isBindingFailure() ? "타입 변환 실패" : fieldError.getDefaultMessage());
         }
         return ErrorResponse.FieldError.of(error.getObjectName(), null, error.getDefaultMessage());
+    }
+
+    /** DB 연결·자원·잠금·timeout(트랜잭션 timeout 포함) 같은 일시 장애인지 예외 타입으로 판단한다. 인증 처리는 503 COMMON_008로 바꾼다. */
+    public static boolean isDatabaseUnavailable(Throwable e) {
+        return e instanceof TransientDataAccessException
+                || e instanceof DataAccessResourceFailureException
+                || e instanceof CannotCreateTransactionException
+                || e instanceof TransactionTimedOutException;
     }
 
     /**

@@ -32,6 +32,10 @@ app:
   swagger:
     server-url: http://localhost:8080
     server-description: Local
+  # 브라우저 요청을 허용할 실제 FE Origin(AppProperties, 쉼표 구분). 비면 기동 실패. wildcard·자리표시자는 거부하며
+  # toss.identity-environment=PROD에서는 https 실제 주소만 받는다(localhost 불가).
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
   google-sheets:
     enabled: ${GOOGLE_SHEETS_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
