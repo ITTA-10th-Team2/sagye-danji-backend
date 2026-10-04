@@ -23,6 +23,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -31,6 +33,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.WebApplicationContext;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -52,7 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * DB 흐름은 MySQL 통합 테스트에서 확인한다.
  */
 @SpringBootTest(classes = {SecurityTestConfig.class, MemberController.class, MemberService.class,
-        ServiceTokenService.class})
+        ServiceTokenService.class, MemberControllerTest.TestBeans.class})
 class MemberControllerTest {
 
     private static final String SID = UUID.randomUUID().toString();
@@ -62,12 +66,24 @@ class MemberControllerTest {
     private AuthSessionRepository sessionRepository;
     @MockitoBean
     private MemberRepository memberRepository;
+    @MockitoBean
+    private PlatformTransactionManager transactionManager;
     @Autowired
     private ServiceTokenService tokenService;
     @Autowired
     private WebApplicationContext context;
 
     private MockMvc mockMvc;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestBeans {
+
+        /** 대체한 트랜잭션 관리자로 commit·rollback 호출과 실패를 확인한다. */
+        @Bean
+        TransactionTemplate transactionTemplate(PlatformTransactionManager transactionManager) {
+            return new TransactionTemplate(transactionManager);
+        }
+    }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) throws Exception {
