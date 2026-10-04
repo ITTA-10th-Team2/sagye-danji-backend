@@ -17,7 +17,6 @@ public record SeasonalContentSheetRow(
         String sourceCheckedDate,
         String title,
         String description,
-        String active,
         SheetSyncStatus syncStatus,
         Instant processingStartedAt,
         Instant syncedAt,
@@ -30,7 +29,7 @@ public record SeasonalContentSheetRow(
         return new SeasonalContentSheetRow(
                 rowNumber, contentCode, season, category, material,
                 availableStartDate, availableEndDate, optimalPeriod, region, timingSource,
-                sourceCheckedDate, title, description, active,
+                sourceCheckedDate, title, description,
                 status, startedAt, syncedAt, dbId, errorMessage);
     }
 
@@ -39,7 +38,7 @@ public record SeasonalContentSheetRow(
         return new SeasonalContentSheetRow(
                 rowNumber, newContentCode, season, category, material,
                 availableStartDate, availableEndDate, optimalPeriod, region, timingSource,
-                sourceCheckedDate, title, description, active,
+                sourceCheckedDate, title, description,
                 syncStatus, processingStartedAt, syncedAt, dbId, errorMessage);
     }
 }

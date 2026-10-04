@@ -4,6 +4,8 @@ import com.gyejoldanji.domain.content.enums.ContentCategory;
 import com.gyejoldanji.domain.content.enums.OptimalPeriod;
 import com.gyejoldanji.global.common.BaseTimeEntity;
 import com.gyejoldanji.global.common.enums.SeasonType;
+import com.gyejoldanji.global.common.exception.BusinessException;
+import com.gyejoldanji.global.common.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -26,7 +28,10 @@ import java.time.format.DateTimeParseException;
 
 /** 계절별 추천 활동의 기본 정보를 관리한다. */
 @Entity
-@Table(name = "seasonal_contents", indexes = @Index(name = "idx_contents_season_active", columnList = "season, is_active"))
+@Table(name = "seasonal_contents", indexes = {
+        @Index(name = "idx_contents_season", columnList = "season"),
+        @Index(name = "idx_contents_recommendation", columnList = "recommendation_status, recommendation_approved, recommendation_order")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SeasonalContent extends BaseTimeEntity {
@@ -91,10 +96,19 @@ public class SeasonalContent extends BaseTimeEntity {
     @Column(name = "description", nullable = false, columnDefinition = "text")
     private String description;
 
-    /** 신규 추천 대상 여부. */
-    @ColumnDefault("true")
-    @Column(name = "is_active", nullable = false)
-    private boolean active = true;
+    /** 이번 주 추천 콘텐츠로 선정됐는지 여부. */
+    @ColumnDefault("false")
+    @Column(name = "recommendation_status", nullable = false)
+    private boolean recommendationStatus = false;
+
+    /** 이번 주 추천에서 배정된 요일 순서. 월요일 0부터 일요일 6까지 사용한다. */
+    @Column(name = "recommendation_order")
+    private Integer recommendationOrder;
+
+    /** 운영자가 이번 주 추천 노출을 승인했는지 여부. */
+    @ColumnDefault("false")
+    @Column(name = "recommendation_approved", nullable = false)
+    private boolean recommendationApproved = false;
 
     /** 활성 상태의 신규 추천 활동을 생성한다. */
     public static SeasonalContent create(
@@ -166,14 +180,34 @@ public class SeasonalContent extends BaseTimeEntity {
         this.description = requireText(description, "활동 설명");
     }
 
-    /** 기존 데이터는 보존하고 신규 추천에서 제외한다. */
-    public void deactivate() {
-        active = false;
+    /** 이번 주 추천으로 선정하고 요일 순서를 배정한다. */
+    public void assignRecommendation(int order) {
+        if (order < 0 || order > 6) {
+            throw new BusinessException(ErrorCode.RECOMMENDATION_ORDER_INVALID);
+        }
+        recommendationStatus = true;
+        recommendationOrder = order;
+        recommendationApproved = true;
     }
 
-    /** 비활성화된 활동을 다시 추천 대상으로 전환한다. */
-    public void activate() {
-        active = true;
+    /** 이번 주 추천의 운영 승인을 복구한다. */
+    public void approveRecommendation() {
+        if (!recommendationStatus || recommendationOrder == null) {
+            throw new BusinessException(ErrorCode.RECOMMENDATION_NOT_ASSIGNED);
+        }
+        recommendationApproved = true;
+    }
+
+    /** 이번 주 추천 선정과 순서를 유지한 채 운영 승인만 해제한다. */
+    public void rejectRecommendation() {
+        recommendationApproved = false;
+    }
+
+    /** 다음 주 재선정을 위해 기존 추천 상태와 순서를 초기화한다. */
+    public void clearRecommendation() {
+        recommendationStatus = false;
+        recommendationOrder = null;
+        recommendationApproved = false;
     }
 
     /** UUID 형식의 외부 고유 코드를 검증한다. */

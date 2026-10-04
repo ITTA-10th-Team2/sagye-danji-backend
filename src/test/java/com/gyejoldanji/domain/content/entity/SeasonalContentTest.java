@@ -22,7 +22,7 @@ class SeasonalContentTest {
     }
 
     @Test
-    void updatesAndChangesActiveState() {
+    void updatesAndChangesRecommendationState() {
         SeasonalContent content = SeasonalContent.create(
                 "69cf3d37-b793-4f6c-a7f8-e46491fe00bf",
                 SeasonType.SPRING, ContentCategory.SCENERY,
@@ -35,15 +35,22 @@ class SeasonalContentTest {
                 "물놀이", "20260701", "20260831",
                 OptimalPeriod.PEAK, "전국", "기상청", "20260601",
                 "물놀이", "시원한 물놀이를 즐겨요.");
-        content.deactivate();
+        content.assignRecommendation(2);
 
         assertThat(content.getSeason()).isEqualTo(SeasonType.SUMMER);
         assertThat(content.getCategory()).isEqualTo(ContentCategory.ACTIVITY_LIFESTYLE);
         assertThat(content.getTitle()).isEqualTo("물놀이");
-        assertThat(content.isActive()).isFalse();
+        assertThat(content.isRecommendationStatus()).isTrue();
+        assertThat(content.isRecommendationApproved()).isTrue();
+        assertThat(content.getRecommendationOrder()).isEqualTo(2);
 
-        content.activate();
-        assertThat(content.isActive()).isTrue();
+        content.rejectRecommendation();
+        assertThat(content.isRecommendationStatus()).isTrue();
+        assertThat(content.isRecommendationApproved()).isFalse();
+
+        content.clearRecommendation();
+        assertThat(content.isRecommendationStatus()).isFalse();
+        assertThat(content.getRecommendationOrder()).isNull();
     }
 
     @Test
