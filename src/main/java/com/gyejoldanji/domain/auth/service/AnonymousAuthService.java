@@ -23,7 +23,6 @@ import com.gyejoldanji.global.common.exception.ErrorCode;
 import com.gyejoldanji.global.common.exception.GlobalExceptionHandler;
 import com.gyejoldanji.global.config.properties.AuthProperties;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -34,7 +33,6 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 원인 타입으로 분류해 503 COMMON_008 또는 500 COMMON_003으로 바꾼다. 다른 도메인의 무결성 409 처리로 넘기지 않으며, 이미 분류된
  * {@link BusinessException}은 그대로 둔다. 트랜잭션과 code 교환은 자동 재시도하지 않는다.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AnonymousAuthService {
@@ -56,7 +54,7 @@ public class AnonymousAuthService {
         } catch (BusinessException e) {
             throw e;
         } catch (RuntimeException e) {
-            throw translate(e);
+            throw GlobalExceptionHandler.translateTransactionFailure("익명 인증", e);
         }
     }
 
@@ -90,15 +88,5 @@ public class AnonymousAuthService {
 
     private static LocalDateTime utc(Instant instant) {
         return LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
-    }
-
-    /** DB 연결·자원·잠금·timeout(트랜잭션 timeout 포함)은 503, 그 밖(무결성·서명·미분류 flush/commit)은 500. 메시지는 남기지 않는다. */
-    private static BusinessException translate(RuntimeException e) {
-        if (GlobalExceptionHandler.isDatabaseUnavailable(e)) {
-            log.warn("익명 인증 트랜잭션 실패(DB 일시 장애): type={}", e.getClass().getName());
-            return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
-        }
-        log.error("익명 인증 트랜잭션 실패: ", GlobalExceptionHandler.withoutMessages(e));
-        return new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 }

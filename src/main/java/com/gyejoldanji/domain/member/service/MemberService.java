@@ -63,7 +63,7 @@ public class MemberService {
         } catch (BusinessException e) {
             throw e;
         } catch (RuntimeException e) {
-            throw translate(e);
+            throw GlobalExceptionHandler.translateTransactionFailure("온보딩 완료", e);
         }
     }
 
@@ -86,16 +86,5 @@ public class MemberService {
         }
         member.completeOnboarding(now);
         return MemberResponse.from(member);
-    }
-
-    /** DB 연결·자원·잠금·timeout(트랜잭션 timeout 포함)은 503, 그 밖(무결성·미분류 flush/commit)은 500. 메시지는 남기지 않는다. */
-    // ponytail: AnonymousAuthService.translate와 같은 분류. 06 Refresh·07 logout이 같은 경계를 쓰면 한곳으로 옮긴다.
-    private static BusinessException translate(RuntimeException e) {
-        if (GlobalExceptionHandler.isDatabaseUnavailable(e)) {
-            log.warn("온보딩 완료 트랜잭션 실패(DB 일시 장애): type={}", e.getClass().getName());
-            return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
-        }
-        log.error("온보딩 완료 트랜잭션 실패: ", GlobalExceptionHandler.withoutMessages(e));
-        return new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 }
