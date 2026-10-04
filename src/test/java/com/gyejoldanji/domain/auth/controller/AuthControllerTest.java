@@ -3,12 +3,12 @@ package com.gyejoldanji.domain.auth.controller;
 import java.util.stream.Stream;
 
 import com.gyejoldanji.domain.auth.dto.AnonymousAuthResponse;
+import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
 import com.gyejoldanji.domain.auth.service.AnonymousAuthService;
 import com.gyejoldanji.domain.auth.toss.TossAnonymousAuthClient;
 import com.gyejoldanji.global.common.exception.BusinessException;
 import com.gyejoldanji.global.common.exception.ErrorCode;
-import com.gyejoldanji.global.common.exception.GlobalExceptionHandler;
-import com.gyejoldanji.global.config.SecurityConfig;
+import com.gyejoldanji.global.security.SecurityTestConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,19 +17,11 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.http.converter.autoconfigure.HttpMessageConvertersAutoConfiguration;
-import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.validation.autoconfigure.ValidationAutoConfiguration;
-import org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration;
-import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -57,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>서비스는 대체한다(외부 호출·DB 없음). 서비스 내부와 실제 DB는 각 서비스 테스트와 MySQL 통합 테스트에서 검증한다.
  */
-@SpringBootTest(classes = AuthControllerTest.TestApplication.class)
+@SpringBootTest(classes = {SecurityTestConfig.class, AuthController.class})
 @ExtendWith(OutputCaptureExtension.class)
 class AuthControllerTest {
 
@@ -66,11 +58,19 @@ class AuthControllerTest {
 
     @MockitoBean
     private AnonymousAuthService anonymousAuthService;
+    /** 보호 체인의 세션 필터용. 인증 체인은 Bearer를 보지 않으므로 호출되지 않아야 한다. */
+    @MockitoBean
+    private AuthSessionRepository sessionRepository;
 
     @Autowired
     private WebApplicationContext context;
 
     private MockMvc mockMvc;
+
+    @DynamicPropertySource
+    static void properties(DynamicPropertyRegistry registry) throws Exception {
+        SecurityTestConfig.register(registry);
+    }
 
     @BeforeEach
     void setUp() {
@@ -103,6 +103,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.anonKey").doesNotExist());
 
         verify(anonymousAuthService).authenticate(SECRET_CODE);
+        verifyNoInteractions(sessionRepository);
         assertThat(output.getAll()).doesNotContain(SECRET_CODE, "SECRET-ACCESS", "SECRET-REFRESH");
     }
 
@@ -207,16 +208,4 @@ class AuthControllerTest {
                 .content(body));
     }
 
-    @Configuration(proxyBeanMethods = false)
-    @ImportAutoConfiguration({
-            DispatcherServletAutoConfiguration.class,
-            WebMvcAutoConfiguration.class,
-            HttpMessageConvertersAutoConfiguration.class,
-            JacksonAutoConfiguration.class,
-            ValidationAutoConfiguration.class,
-            SecurityAutoConfiguration.class,
-            ServletWebSecurityAutoConfiguration.class})
-    @Import({SecurityConfig.class, GlobalExceptionHandler.class, AuthController.class})
-    static class TestApplication {
-    }
 }

@@ -10,6 +10,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
 		"app.google-sheets.enabled=false",
+		"app.cors.allowed-origins=http://localhost:5173",
 		// 비밀이 아닌 테스트 값. TossProperties 검증은 그대로 거치고 아래 대체로 keystore 파일은 열지 않는다.
 		"toss.app-name=test-app",
 		"toss.identity-environment=DEV",

@@ -13,6 +13,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
 import com.gyejoldanji.global.config.SecurityConfig;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterRegistration;
@@ -23,24 +24,21 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.http.converter.autoconfigure.HttpMessageConvertersAutoConfiguration;
-import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.boot.servlet.autoconfigure.HttpEncodingAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebServerAutoConfiguration;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration;
-import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,7 +52,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 실제 Tomcat(임의 포트)과 운영 {@link SecurityConfig}로 본문 제한의 등록과 chunked 요청 처리를 검증한다(T31).
  *
- * <p>웹·Jackson·Security 자동 설정만 올리고 DB·토스·JWT 설정은 사용하지 않는다. 컨트롤러는 이 테스트 전용 에코다.
+ * <p>{@link SecurityTestConfig}(웹·Jackson·Security·JWT test 키)만 올리고 DB·토스는 사용하지 않는다. 컨트롤러는 이 테스트
+ * 전용 에코다.
  */
 @SpringBootTest(classes = AuthRequestBodyLimitHttpTest.TestApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -72,6 +71,13 @@ class AuthRequestBodyLimitHttpTest {
 
     @Autowired
     private WebApplicationContext context;
+    @MockitoBean
+    private AuthSessionRepository sessionRepository;
+
+    @DynamicPropertySource
+    static void properties(DynamicPropertyRegistry registry) throws Exception {
+        SecurityTestConfig.register(registry);
+    }
 
     @BeforeEach
     void reset() {
@@ -79,18 +85,25 @@ class AuthRequestBodyLimitHttpTest {
         CONTROLLER_CALLS.set(0);
     }
 
-    /** Security 체인 하나에 한 번만 들어가고 Bean·Servlet 필터로는 등록되지 않는다. */
+    /**
+     * 본문 제한은 인증 체인에만, 세션 필터는 보호 체인에만 한 번씩 들어가고 Bean·Servlet 필터로는 등록되지 않는다(중복 실행
+     * 없음).
+     */
     @Test
-    void registeredOnceOnlyInSecurityChain() {
+    void registeredOnceOnlyInTheirSecurityChains() {
         List<SecurityFilterChain> chains = context.getBean(FilterChainProxy.class).getFilterChains();
-        assertThat(chains).hasSize(1);
-        assertThat(chains.getFirst().getFilters()).filteredOn(AuthRequestBodyLimitFilter.class::isInstance).hasSize(1);
+        assertThat(chains).hasSize(2);
+        assertThat(chains.get(0).getFilters()).filteredOn(AuthRequestBodyLimitFilter.class::isInstance).hasSize(1);
+        assertThat(chains.get(0).getFilters()).filteredOn(SessionValidationFilter.class::isInstance).isEmpty();
+        assertThat(chains.get(1).getFilters()).filteredOn(AuthRequestBodyLimitFilter.class::isInstance).isEmpty();
+        assertThat(chains.get(1).getFilters()).filteredOn(SessionValidationFilter.class::isInstance).hasSize(1);
 
         assertThat(context.getBeansOfType(AuthRequestBodyLimitFilter.class)).isEmpty();
+        assertThat(context.getBeansOfType(SessionValidationFilter.class)).isEmpty();
         var registrations = context.getServletContext().getFilterRegistrations();
         assertThat(registrations).containsKey("springSecurityFilterChain");
         assertThat(registrations.values()).extracting(FilterRegistration::getClassName)
-                .doesNotContain(AuthRequestBodyLimitFilter.class.getName());
+                .doesNotContain(AuthRequestBodyLimitFilter.class.getName(), SessionValidationFilter.class.getName());
     }
 
     /** 실제 chunked 요청에서 16,384바이트는 원문 그대로 MVC에 도착하고 16,385바이트는 컨트롤러 전에 413이다. */
@@ -118,18 +131,21 @@ class AuthRequestBodyLimitHttpTest {
         assertThat(CONTROLLER_CALLS).hasValue(0);
     }
 
-    /** MVC가 인증 경로로 라우팅하는 인코딩 경로에도 적용하고, 다른 경로는 제한하지 않는다. */
+    /**
+     * MVC가 인증 경로로 라우팅하는 인코딩 경로에도 인증 체인·본문 제한을 적용한다. 다른 경로는 본문 제한 대상이 아니며 보호
+     * 체인이 인증 없이 거부한다(413이 아닌 401).
+     */
     @Test
-    void followsMvcRoutingAndLeavesOtherPathsAlone() throws Exception {
+    void followsMvcRoutingAndLeavesOtherPathsToProtectedChain() throws Exception {
         byte[] over = jsonOfBytes(LIMIT + 1);
         // %61은 'a'. 상한 이하 요청이 에코되므로 MVC가 /api/auth/anonymous로 라우팅함을 함께 확인한다.
         assertThat(post("/api/auth/%61nonymous", chunked(jsonOfBytes(LIMIT))).statusCode()).isEqualTo(200);
         assertTooLarge(post("/api/auth/%61nonymous", chunked(over)));
 
         HttpResponse<byte[]> other = post("/api/other", chunked(over));
-        assertThat(other.statusCode()).isEqualTo(200);
-        assertThat(other.body()).isEqualTo(over);
-        assertThat(CONTROLLER_CALLS).hasValue(2);
+        assertThat(other.statusCode()).isEqualTo(401);
+        assertThat(jsonFields(other.body()).get("code")).isEqualTo("COMMON_005");
+        assertThat(CONTROLLER_CALLS).hasValue(1);
     }
 
     private HttpResponse<byte[]> post(String path, BodyPublisher body) throws Exception {
@@ -157,15 +173,9 @@ class AuthRequestBodyLimitHttpTest {
     @Configuration(proxyBeanMethods = false)
     @ImportAutoConfiguration({
             TomcatServletWebServerAutoConfiguration.class,
-            DispatcherServletAutoConfiguration.class,
-            WebMvcAutoConfiguration.class,
-            HttpMessageConvertersAutoConfiguration.class,
-            JacksonAutoConfiguration.class,
             HttpEncodingAutoConfiguration.class,
-            SecurityAutoConfiguration.class,
-            ServletWebSecurityAutoConfiguration.class,
             SecurityFilterAutoConfiguration.class})
-    @Import({SecurityConfig.class, EchoController.class})
+    @Import({SecurityTestConfig.class, EchoController.class})
     static class TestApplication {
 
         /** Security 필터보다 먼저 실행해 실제 도착한 길이 헤더를 기록한다. */
