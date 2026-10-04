@@ -93,8 +93,17 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     // 앞 단계에서 이미 처리된 오류의 내부 오류 페이지 dispatch는 인증 오류로 덮지 않는다.
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
+                    // 콘텐츠 추천의 경우, 인증 불필요
+                    auth.requestMatchers(
+                            HttpMethod.GET,
+                            "/api/v1/recommendations/today"
+                    ).permitAll();
+
                     auth.requestMatchers(HttpMethod.GET, "/api/members/me").authenticated();
                     auth.requestMatchers(HttpMethod.POST, "/api/members/me/onboarding/complete").authenticated();
+                    auth.requestMatchers(HttpMethod.POST, "/api/records").authenticated();
+                    auth.requestMatchers(HttpMethod.PATCH, "/api/records/*").authenticated();
+                    auth.requestMatchers(HttpMethod.DELETE, "/api/records/*").authenticated();
                     if (dev) {
                         auth.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
                                 "/api/test/response").permitAll();
@@ -115,7 +124,8 @@ public class SecurityConfig {
     }
 
     /**
-     * 설정한 실제 Origin만 허용한다. Authorization·Content-Type, GET·POST·OPTIONS, credentials 없음, Retry-After 노출.
+     * 설정한 실제 Origin만 허용한다. Authorization·Content-Type, GET·POST·PATCH·DELETE·OPTIONS, credentials 없음,
+     * Retry-After 노출.
      *
      * @throws IllegalStateException PROD에서 https가 아니거나 localhost·loopback Origin이 있을 때(기동 실패)
      */
@@ -130,7 +140,7 @@ public class SecurityConfig {
         }
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(origins);
-        cors.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE));
         cors.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         cors.setAllowCredentials(false);

@@ -90,6 +90,20 @@ class DomainBehaviorTest {
     }
 
     @Test
+    void keepsRecordStateWhenUpdatedMemoIsInvalid() {
+        Member member = Member.create("TOSS", "member-1");
+        Record record = Record.create(member, LocalDate.of(2026, 10, 1), SeasonType.AUTUMN, "수정 전");
+
+        assertThatThrownBy(() -> record.update(
+                LocalDate.of(2026, 12, 1), SeasonType.WINTER, "🍁".repeat(101)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(record.getRecordDate()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(record.getSeason()).isEqualTo(SeasonType.AUTUMN);
+        assertThat(record.getMemo()).isEqualTo("수정 전");
+    }
+
+    @Test
     void changesSeasonalContentAndRecommendationState() {
         SeasonalContent content = SeasonalContent.create(
                 "c1849166-210b-45d0-bd54-681c0147b010",
@@ -122,6 +136,17 @@ class DomainBehaviorTest {
         assertThatThrownBy(() -> Image.create(record, "original/key", null, PhotoSource.GALLERY, -1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("이미지 표시 순서는 0 이상이어야 합니다.");
+    }
+
+    @Test
+    void changesImageOrderThroughDomainMethod() {
+        Record record = Record.create(Member.create("TOSS", "member-1"),
+                LocalDate.of(2026, 10, 1), SeasonType.AUTUMN, null);
+        Image image = Image.create(record, "original/key", null, PhotoSource.GALLERY, 0);
+
+        image.changeSortOrder(3);
+
+        assertThat(image.getSortOrder()).isEqualTo(3);
     }
 
     @Test

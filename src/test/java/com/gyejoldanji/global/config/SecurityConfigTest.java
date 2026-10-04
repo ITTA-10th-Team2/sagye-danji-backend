@@ -310,7 +310,7 @@ class SecurityConfigTest {
         });
     }
 
-    /** 허용 Origin의 preflight만 통과하고 credentials 없이 Authorization·Content-Type·GET/POST/OPTIONS를 허용한다(T25). */
+    /** 허용 Origin의 preflight만 통과하고 Authorization·Content-Type과 API의 GET/POST/PATCH/DELETE/OPTIONS를 허용한다(T25). */
     @Test
     void corsPreflightAllowsOnlyConfiguredOrigin() {
         withMvc("DEV", mvc -> {
@@ -318,7 +318,8 @@ class SecurityConfigTest {
                     .andExpect(status().isOk())
                     .andExpect(header().string("Access-Control-Allow-Origin", ORIGIN))
                     .andExpect(header().string("Access-Control-Allow-Methods", allOf(containsString("GET"),
-                            containsString("POST"), containsString("OPTIONS"), not(containsString("PUT")))))
+                            containsString("POST"), containsString("PATCH"), containsString("DELETE"),
+                            containsString("OPTIONS"), not(containsString("PUT")))))
                     .andExpect(header().string("Access-Control-Allow-Headers", containsString("authorization")))
                     .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
             mvc.perform(preflight("/api/auth/anonymous", ORIGIN, "POST", "content-type"))

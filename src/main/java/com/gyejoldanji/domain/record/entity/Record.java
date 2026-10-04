@@ -72,9 +72,12 @@ public class Record extends BaseTimeEntity {
 
     /** 저장된 기록의 날짜·계절·글을 함께 수정한다. */
     public void update(LocalDate recordDate, SeasonType season, String memo) {
-        this.recordDate = Objects.requireNonNull(recordDate);
-        this.season = Objects.requireNonNull(season);
-        this.memo = validateMemo(memo);
+        LocalDate validatedDate = Objects.requireNonNull(recordDate, "recordDate");
+        SeasonType validatedSeason = Objects.requireNonNull(season, "season");
+        String validatedMemo = validateMemo(memo);
+        this.recordDate = validatedDate;
+        this.season = validatedSeason;
+        this.memo = validatedMemo;
     }
 
     /** 기록 글의 최대 길이를 검증한다. */

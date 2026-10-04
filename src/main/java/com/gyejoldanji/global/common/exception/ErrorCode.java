@@ -45,6 +45,15 @@ public enum ErrorCode {
     AUTH_PROVIDER_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AUTH_012", "사용자 인증 응답 시간이 초과되었습니다."),
     AUTH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "AUTH_014", "요청이 많습니다. 잠시 후 다시 시도해 주세요."),
 
+    // Record
+    RECORD_NOT_FOUND(HttpStatus.NOT_FOUND, "RECORD_001", "기록을 찾을 수 없습니다."),
+    RECORD_IMAGE_REQUIRED(HttpStatus.BAD_REQUEST, "RECORD_002", "기록에는 이미지가 한 장 이상 필요합니다."),
+    RECORD_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "RECORD_003", "기록에 첨부할 수 있는 이미지 수를 초과했습니다."),
+    RECORD_IMAGE_ORDER_INVALID(HttpStatus.BAD_REQUEST, "RECORD_004", "이미지 표시 순서가 올바르지 않습니다."),
+
+    // Image
+    IMAGE_ALREADY_ATTACHED(HttpStatus.CONFLICT, "IMAGE_001", "이미 사용 중인 이미지입니다."),
+
     // Content Sync
     CONTENT_SYNC_INVALID_ROW(
             HttpStatus.BAD_REQUEST,
