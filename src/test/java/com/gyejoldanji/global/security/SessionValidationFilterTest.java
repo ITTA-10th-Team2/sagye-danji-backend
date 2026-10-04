@@ -214,7 +214,7 @@ class SessionValidationFilterTest {
         assertThat(chainCalls).as("다음 처리 미호출").isZero();
         assertThat(SecurityContextHolder.getContext().getAuthentication()).as("SecurityContext 비움").isNull();
         assertThat(response.getStatus()).isEqualTo(status);
-        assertThat(response.getContentType()).isEqualTo("application/json");
+        assertThat(response.getContentType()).isEqualTo("application/json;charset=UTF-8");
         assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
         assertThat(response.getHeader("Pragma")).isEqualTo("no-cache");
         assertThat(response.getHeader("WWW-Authenticate")).isEqualTo(status == 401 ? "Bearer" : null);
