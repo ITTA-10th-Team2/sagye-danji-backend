@@ -290,9 +290,12 @@ class SecurityConfigTest {
         });
     }
 
-    /** Swagger·테스트 API는 DEV에서만 GET 공개다. PROD에서는 익명 401, 인증해도 403이다. */
+    /**
+     * Swagger 문서 경로는 환경과 무관하게 GET 공개다(실제 노출은 app.swagger.enabled로 springdoc 자체를 켜고 끈다). 테스트
+     * API는 DEV에서만 GET 공개이며 PROD에서는 익명 401, 인증해도 403이다.
+     */
     @Test
-    void docsAndTestApiAreDevOnly() {
+    void docsArePublicRegardlessOfEnvironmentAndTestApiIsDevOnly() {
         withMvc("DEV", mvc -> {
             mvc.perform(get("/v3/api-docs")).andExpect(status().isOk()).andExpect(content().string("docs"));
             mvc.perform(get("/api/test/response")).andExpect(status().isOk());
@@ -301,12 +304,15 @@ class SecurityConfigTest {
         CONTROLLER_CALLS.set(0);
         withMvc("PROD", mvc -> {
             when(repository.findAuthenticationView(any(), any())).thenReturn(Optional.of(activeView()));
-            for (String path : List.of("/v3/api-docs", "/swagger-ui/index.html", "/swagger-ui.html", "/api/test/response")) {
-                expectError(mvc.perform(get(path)), 401, "COMMON_005");
-                expectError(mvc.perform(get(path).header("Authorization", bearer(tokenService, Instant.now()))),
-                        403, "COMMON_006");
+            for (String path : List.of("/v3/api-docs", "/swagger-ui/index.html", "/swagger-ui.html")) {
+                mvc.perform(get(path)).andExpect(status().isOk()).andExpect(content().string("docs"));
             }
-            assertThat(CONTROLLER_CALLS).hasValue(0);
+            assertThat(CONTROLLER_CALLS).hasValue(3);
+
+            expectError(mvc.perform(get("/api/test/response")), 401, "COMMON_005");
+            expectError(mvc.perform(get("/api/test/response").header("Authorization", bearer(tokenService, Instant.now()))),
+                    403, "COMMON_006");
+            assertThat(CONTROLLER_CALLS).hasValue(3);
         });
     }
 
@@ -425,7 +431,7 @@ class SecurityConfigTest {
 
     private static void expectError(ResultActions result, int status, String code) throws Exception {
         result.andExpect(status().is(status))
-                .andExpect(header().string("Content-Type", "application/json"))
+                .andExpect(header().string("Content-Type", "application/json;charset=UTF-8"))
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(header().string("Pragma", "no-cache"))
                 .andExpect(status == 401 ? header().string("WWW-Authenticate", "Bearer")

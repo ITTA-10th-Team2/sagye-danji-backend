@@ -254,7 +254,7 @@ class AccessTokenValidationTest {
     private static void assertErrorResponse(MockHttpServletResponse response, int status, String code, String message)
             throws Exception {
         assertThat(response.getStatus()).isEqualTo(status);
-        assertThat(response.getContentType()).isEqualTo("application/json");
+        assertThat(response.getContentType()).isEqualTo("application/json;charset=UTF-8");
         assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
         assertThat(response.getHeader("Pragma")).isEqualTo("no-cache");
         assertThat(response.getHeader("WWW-Authenticate")).isEqualTo(status == 401 ? "Bearer" : null);

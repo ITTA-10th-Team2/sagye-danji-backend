@@ -44,7 +44,10 @@ public class JsonSecurityErrorHandler implements AuthenticationEntryPoint, Acces
         write(response, ErrorCode.FORBIDDEN);
     }
 
-    /** 오류 코드의 상태·기본 메시지로 응답한다. 401에는 Bearer challenge를 둔다. 토큰·요청 값은 응답·로그에 남기지 않는다. */
+    /**
+     * 오류 코드의 상태·기본 메시지로 응답한다. 401에는 Bearer challenge를 둔다. 토큰·요청 값은 응답·로그에 남기지 않는다.
+     * 한글 메시지가 깨지지 않게 응답 인코딩과 Content-Type의 charset을 함께 지정한다.
+     */
     public void write(HttpServletResponse response, ErrorCode errorCode) throws IOException {
         byte[] json = jsonMapper.writeValueAsBytes(ErrorResponse.of(errorCode));
         response.setStatus(errorCode.getHttpStatus().value());
@@ -53,7 +56,8 @@ public class JsonSecurityErrorHandler implements AuthenticationEntryPoint, Acces
         }
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         response.setHeader(HttpHeaders.PRAGMA, "no-cache");
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8");
         response.setContentLength(json.length);
         response.getOutputStream().write(json);
     }
