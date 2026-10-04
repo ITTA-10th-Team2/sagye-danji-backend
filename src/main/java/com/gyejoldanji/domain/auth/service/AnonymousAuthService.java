@@ -24,11 +24,7 @@ import com.gyejoldanji.global.common.exception.GlobalExceptionHandler;
 import com.gyejoldanji.global.config.properties.AuthProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.CannotCreateTransactionException;
-import org.springframework.transaction.TransactionTimedOutException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -98,10 +94,7 @@ public class AnonymousAuthService {
 
     /** DB 연결·자원·잠금·timeout(트랜잭션 timeout 포함)은 503, 그 밖(무결성·서명·미분류 flush/commit)은 500. 메시지는 남기지 않는다. */
     private static BusinessException translate(RuntimeException e) {
-        if (e instanceof TransientDataAccessException
-                || e instanceof DataAccessResourceFailureException
-                || e instanceof CannotCreateTransactionException
-                || e instanceof TransactionTimedOutException) {
+        if (GlobalExceptionHandler.isDatabaseUnavailable(e)) {
             log.warn("익명 인증 트랜잭션 실패(DB 일시 장애): type={}", e.getClass().getName());
             return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
         }
