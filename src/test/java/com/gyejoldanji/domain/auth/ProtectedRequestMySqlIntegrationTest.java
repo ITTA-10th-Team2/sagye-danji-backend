@@ -19,6 +19,7 @@ import com.gyejoldanji.domain.auth.entity.AuthSession;
 import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
 import com.gyejoldanji.domain.auth.service.AnonymousAuthService;
 import com.gyejoldanji.domain.auth.service.ServiceTokenService;
+import com.gyejoldanji.domain.auth.service.SessionLogoutService;
 import com.gyejoldanji.domain.auth.service.TokenRefreshService;
 import com.gyejoldanji.domain.auth.toss.TossAnonymousAuthClient;
 import com.gyejoldanji.domain.member.controller.MemberController;
@@ -120,7 +121,7 @@ class ProtectedRequestMySqlIntegrationTest {
     @EnableJpaRepositories(basePackageClasses = {MemberRepository.class, AuthSessionRepository.class})
     @EnableJpaAuditing(dateTimeProviderRef = "utcDateTimeProvider")
     @Import({SecurityTestConfig.class, ServiceTokenService.class, AnonymousAuthService.class, TokenRefreshService.class,
-            AuthController.class, MemberService.class, MemberController.class})
+            SessionLogoutService.class, AuthController.class, MemberService.class, MemberController.class})
     static class Config {
 
         /** 앱 DataSource를 연결 장애 주입용 래퍼로 감싼다. 테스트가 켤 때만 동작한다. */

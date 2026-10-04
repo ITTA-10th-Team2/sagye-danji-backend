@@ -41,6 +41,7 @@ import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
 import com.gyejoldanji.domain.auth.service.AnonymousAuthService;
 import com.gyejoldanji.domain.auth.service.ServiceTokenService;
 import com.gyejoldanji.domain.auth.service.ServiceTokenService.IssuedTokens;
+import com.gyejoldanji.domain.auth.service.SessionLogoutService;
 import com.gyejoldanji.domain.auth.service.TokenRefreshService;
 import com.gyejoldanji.domain.auth.toss.TossAnonymousAuthClient;
 import com.gyejoldanji.domain.member.controller.MemberController;
@@ -158,7 +159,7 @@ class TokenRefreshMySqlIntegrationTest {
     @EnableJpaRepositories(basePackageClasses = {MemberRepository.class, AuthSessionRepository.class})
     @EnableJpaAuditing(dateTimeProviderRef = "utcDateTimeProvider")
     @Import({SecurityTestConfig.class, ServiceTokenService.class, AnonymousAuthService.class, TokenRefreshService.class,
-            AuthController.class, MemberService.class, MemberController.class})
+            SessionLogoutService.class, AuthController.class, MemberService.class, MemberController.class})
     static class Config {
 
         /** auditing·JWT 검증·세션 필터·서비스가 함께 쓰는 조절 가능한 Clock. */
