@@ -1,8 +1,15 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   mysql:
     image: mysql:8.0
     container_name: mysql
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: gyejol_danji
@@ -25,6 +32,7 @@ services:
     image: shlee811/sagye-danji-backend:latest
     container_name: app
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       DB_URL: jdbc:mysql://mysql:3306/gyejol_danji?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
@@ -45,6 +53,8 @@ services:
         source: ${GOOGLE_SERVICE_ACCOUNT_JSON_PATH}
         target: /run/secrets/google-service-account.json
         read_only: true
+      - ./secrets/jwt:/run/secrets/jwt:ro
+      - ./secrets/toss:/run/secrets/toss:ro
     depends_on:
       mysql:
         condition: service_healthy
@@ -53,6 +63,7 @@ services:
     image: nginx:1.27-alpine
     container_name: nginx
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
