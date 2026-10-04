@@ -32,6 +32,10 @@ public class AuthProperties {
     @Max(1_209_600)
     private long sessionTtlSeconds = 1_209_600;
 
+    /** 세션 만료 뒤 세션·Refresh 이력을 보관하는 기간(일). 지나면 만료 이력 정리가 삭제한다. 0 이하는 거부한다. */
+    @Min(1)
+    private int expiredSessionRetentionDays = 7;
+
     /** 세션이 Access 토큰보다 먼저 끝나지 않는지 검증한다. */
     @AssertTrue(message = "session-ttl-seconds는 access-ttl-seconds 이상이어야 합니다.")
     public boolean isSessionTtlAtLeastAccessTtl() {

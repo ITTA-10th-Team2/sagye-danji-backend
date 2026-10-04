@@ -66,6 +66,8 @@ auth:
     public-key-path: ${AUTH_JWT_PUBLIC_KEY_PATH:}
   access-ttl-seconds: ${AUTH_ACCESS_TTL_SECONDS:900}
   session-ttl-seconds: ${AUTH_SESSION_TTL_SECONDS:1209600}
+  # 세션 만료 뒤 이 기간(일)이 지나면 매일 03:00 UTC 정리가 세션·Refresh 이력을 삭제한다. 1 이상.
+  expired-session-retention-days: ${AUTH_EXPIRED_SESSION_RETENTION_DAYS:7}
 
 # 토스 익명 키 교환 설정(TossProperties). 필수값이 없으면 애플리케이션이 시작되지 않는다(빈 기본값 = 누락 검증).
 # keystore는 미니앱 client 개인키·인증서 체인이 든 PKCS#12이며 JWT 서명키와 별개다. 파일·암호는 Git에 넣지 않는다.
