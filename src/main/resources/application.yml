@@ -71,3 +71,9 @@ toss:
     keystore-password: ${TOSS_MTLS_KEYSTORE_PASSWORD:}
   connect-timeout-seconds: ${TOSS_CONNECT_TIMEOUT_SECONDS:3}
   request-timeout-seconds: ${TOSS_REQUEST_TIMEOUT_SECONDS:5}
+
+# Hibernate SQL 오류 logger는 드라이버 메시지 원문을 WARN으로 남긴다(예: Duplicate entry '<Refresh 해시 바이트>').
+# 오류 코드 줄과 같은 수준이라 이 logger만 끈다. 오류 타입·스택은 서비스·GlobalExceptionHandler가 메시지 없이 남긴다.
+logging:
+  level:
+    org.hibernate.orm.jdbc.error: "off"

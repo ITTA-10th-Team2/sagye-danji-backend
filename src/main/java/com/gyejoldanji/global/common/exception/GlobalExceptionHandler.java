@@ -221,6 +221,20 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 인증·회원 트랜잭션(commit 포함) 실패를 원인 타입으로 바꾼다. DB 연결·자원·잠금·timeout은 503 COMMON_008, 그 밖(무결성·서명·미분류
+     * flush/commit)은 500 COMMON_003이다. 서비스의 트랜잭션 경계 밖에서 불러 무결성 실패가 위의 일반 409로 가지 않게 한다. 예외
+     * 메시지는 남기지 않는다(503은 타입, 500은 메시지를 뺀 원인 체인).
+     */
+    public static BusinessException translateTransactionFailure(String operation, RuntimeException e) {
+        if (isDatabaseUnavailable(e)) {
+            log.warn("{} 트랜잭션 실패(DB 일시 장애): type={}", operation, e.getClass().getName());
+            return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
+        }
+        log.error("{} 트랜잭션 실패: ", operation, withoutMessages(e));
+        return new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+    }
+
+    /**
      * 메시지를 버린 예외 사본. 각 원인을 {@code Throwable: 원래타입}과 원래 스택트레이스로 바꿔 원인 체인을 유지한다.
      *
      * <p>ponytail: suppressed 예외는 버린다. 필요해지면 같은 방식으로 복사한다.
