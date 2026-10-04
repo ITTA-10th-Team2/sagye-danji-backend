@@ -79,6 +79,7 @@ class SecurityConfigTest {
 
     private static final String ORIGIN = SecurityTestConfig.ALLOWED_ORIGIN;
     private static final String SID = UUID.randomUUID().toString();
+    private static final String ONBOARDING = "/api/members/me/onboarding/complete";
     private static final AtomicInteger CONTROLLER_CALLS = new AtomicInteger();
 
     @TempDir
@@ -122,7 +123,8 @@ class SecurityConfigTest {
                     assertThat(auth.matches(new MockHttpServletRequest(method, path))).as(method + path).isTrue();
                 }
             }
-            for (String path : List.of("/api/auth/anonymous/", "/api/auth", "/api/auth/other", "/api/members/me")) {
+            for (String path : List.of("/api/auth/anonymous/", "/api/auth", "/api/auth/other", "/api/members/me",
+                    ONBOARDING)) {
                 assertThat(auth.matches(new MockHttpServletRequest("POST", path))).as(path).isFalse();
                 assertThat(api.matches(new MockHttpServletRequest("POST", path))).as(path).isTrue();
             }
@@ -235,6 +237,38 @@ class SecurityConfigTest {
             expectError(mvc.perform(post("/api/members/me").header("Authorization", token)), 403, "COMMON_006");
             expectError(mvc.perform(get("/error")), 401, "COMMON_005");
             assertThat(CONTROLLER_CALLS).hasValue(0);
+        });
+    }
+
+    /**
+     * 온보딩 완료는 보호 체인의 정확한 POST만 인증 후 컨트롤러로 간다(CurrentMember 주입). 다른 메서드·끝 슬래시·상위 경로는 인증해도
+     * 403, Bearer 없는 POST는 401이다. 허용 Origin의 POST preflight는 Authorization과 함께 통과한다.
+     */
+    @Test
+    void protectedChainAllowsOnlyPostOnboardingCompletion() {
+        withMvc("PROD", mvc -> {
+            when(repository.findAuthenticationView(SID, 42L)).thenReturn(Optional.of(activeView()));
+            String token = bearer(tokenService, Instant.now());
+
+            mvc.perform(post(ONBOARDING).header("Authorization", token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.memberId").value(42))
+                    .andExpect(jsonPath("$.sessionId").value(7));
+            assertThat(CONTROLLER_CALLS).hasValue(1);
+
+            for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)) {
+                expectError(mvc.perform(request(method, ONBOARDING).header("Authorization", token)), 403, "COMMON_006");
+            }
+            for (String path : List.of(ONBOARDING + "/", "/api/members/me/onboarding", ONBOARDING + "/extra")) {
+                expectError(mvc.perform(post(path).header("Authorization", token)), 403, "COMMON_006");
+            }
+            expectError(mvc.perform(post(ONBOARDING)), 401, "COMMON_005");
+            assertThat(CONTROLLER_CALLS).hasValue(1);
+
+            mvc.perform(preflight(ONBOARDING, ORIGIN, "POST", "authorization"))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Access-Control-Allow-Origin", ORIGIN));
+            assertThat(CONTROLLER_CALLS).hasValue(1);
         });
     }
 
@@ -441,6 +475,13 @@ class SecurityConfigTest {
 
         @GetMapping("/api/members/me")
         Map<String, Long> me(@AuthenticationPrincipal CurrentMember member) {
+            CONTROLLER_CALLS.incrementAndGet();
+            return Map.of("memberId", member.memberId(), "sessionId", member.sessionId());
+        }
+
+        /** 모든 메서드·하위 경로를 받아 체인이 거부하는지만 본다. */
+        @RequestMapping({ONBOARDING, ONBOARDING + "/", "/api/members/me/onboarding", ONBOARDING + "/extra"})
+        Map<String, Long> onboarding(@AuthenticationPrincipal CurrentMember member) {
             CONTROLLER_CALLS.incrementAndGet();
             return Map.of("memberId", member.memberId(), "sessionId", member.sessionId());
         }

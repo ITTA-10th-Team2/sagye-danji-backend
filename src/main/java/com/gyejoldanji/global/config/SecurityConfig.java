@@ -94,6 +94,7 @@ public class SecurityConfig {
                     // 앞 단계에서 이미 처리된 오류의 내부 오류 페이지 dispatch는 인증 오류로 덮지 않는다.
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/api/members/me").authenticated();
+                    auth.requestMatchers(HttpMethod.POST, "/api/members/me/onboarding/complete").authenticated();
                     if (dev) {
                         auth.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
                                 "/api/test/response").permitAll();
