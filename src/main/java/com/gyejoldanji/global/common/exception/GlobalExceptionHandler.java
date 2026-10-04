@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 
 import lombok.RequiredArgsConstructor;
@@ -184,6 +185,18 @@ public class GlobalExceptionHandler {
                         "타입 변환 실패: " + requiredType + " 형식이어야 합니다.");
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, List.of(fieldError)));
+    }
+
+    /**
+     * 존재하지 않는 정적 리소스·경로 요청 처리 (404).
+     *
+     * <p>봇·스캐너의 무작위 경로 요청이 대부분이라 스택트레이스 없이 경로만 DEBUG로 남긴다.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    protected ResponseEntity<ErrorResponse> handleNoResourceFoundException(NoResourceFoundException e) {
+        log.debug("NoResourceFoundException: method={}, path={}", e.getHttpMethod(), e.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     /**
