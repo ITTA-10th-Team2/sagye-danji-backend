@@ -55,6 +55,12 @@ app:
       generation-cron: ${GOOGLE_SHEETS_RECOMMENDATION_GENERATION_CRON:0 0 0 * * MON}
       sync-cron: ${GOOGLE_SHEETS_RECOMMENDATION_SYNC_CRON:0 */5 * * * *}
       zone: ${GOOGLE_SHEETS_RECOMMENDATION_ZONE:Asia/Seoul}
+  # 기록 이미지 저장소(S3Properties). false면 AWS 없이 메모리 기반 FakeImageStorageClient를 쓴다(로컬·CI).
+  # 자격 증명은 DefaultCredentialsProvider(EC2 IAM 역할 등)로 얻으며 키를 설정 파일에 두지 않는다.
+  s3:
+    enabled: ${S3_ENABLED:false}
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-northeast-2}
 
 # 자체 JWT·세션 설정(AuthProperties). jwt 값과 키 파일이 없거나 잘못되면 애플리케이션이 시작되지 않는다.
 # 키 경로는 실행 환경(컨테이너) 안의 PEM 파일 경로다. 키 파일은 Git에 넣지 않는다.

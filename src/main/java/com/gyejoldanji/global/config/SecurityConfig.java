@@ -107,6 +107,7 @@ public class SecurityConfig {
                     auth.requestMatchers(HttpMethod.POST, "/api/records").authenticated();
                     auth.requestMatchers(HttpMethod.PATCH, "/api/records/*").authenticated();
                     auth.requestMatchers(HttpMethod.DELETE, "/api/records/*").authenticated();
+                    auth.requestMatchers(HttpMethod.POST, "/api/images/presigned-url").authenticated();
                     // 환경과 무관하게 경로는 열어 두고, 실제 응답 여부는 app.swagger.enabled로 springdoc 자체를 켜고 끈다.
                     auth.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
                             .permitAll();
