@@ -16,6 +16,14 @@ import java.util.Optional;
 /** 기록 저장과 회원 소유권을 포함한 command용 잠금 조회를 제공한다. */
 public interface RecordRepository extends JpaRepository<Record, Long> {
 
+    /** 회원의 전체 기록 수와 가장 오래된 기록일을 단일 집계 쿼리로 조회한다. */
+    @Query(value = """
+            select count(*) as recordCount, min(record_date) as firstRecordDate
+            from records
+            where member_id = :memberId
+            """, nativeQuery = true)
+    RecordSummaryProjection summarizeByMemberId(@Param("memberId") Long memberId);
+
     /** 다른 회원의 기록 존재 여부를 노출하지 않도록 ID와 회원 ID를 함께 조건화해 행 잠금 조회한다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from Record r where r.id = :recordId and r.member.id = :memberId")
@@ -82,4 +90,11 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
                                                    @Param("cursorDate") LocalDate cursorDate,
                                                    @Param("cursorId") Long cursorId,
                                                    Pageable pageable);
+
+    /** 홈 기록 요약 계산에 필요한 집계 결과만 노출한다. */
+    interface RecordSummaryProjection {
+        long getRecordCount();
+
+        LocalDate getFirstRecordDate();
+    }
 }

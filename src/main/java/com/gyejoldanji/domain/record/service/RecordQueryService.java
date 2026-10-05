@@ -5,6 +5,7 @@ import com.gyejoldanji.domain.image.repository.ImageRepository;
 import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordListItemResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
+import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.domain.record.repository.RecordRepository;
 import com.gyejoldanji.global.common.enums.SeasonType;
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.Clock;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +31,8 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class RecordQueryService {
 
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
     private static final int MIN_YEAR = 2000;
     private static final int MAX_YEAR = 2100;
     private static final int MIN_PAGE_SIZE = 1;
@@ -35,6 +41,19 @@ public class RecordQueryService {
     private final RecordRepository recordRepository;
     private final ImageRepository imageRepository;
     private final RecordCursorCodec cursorCodec;
+    private final Clock clock;
+
+    /** 회원의 전체 기록 수와 첫 기록일부터 오늘까지의 누적 일수를 조회한다. */
+    public RecordSummaryResponse findSummary(Long memberId) {
+        validateMemberId(memberId);
+        RecordRepository.RecordSummaryProjection summary = recordRepository.summarizeByMemberId(memberId);
+        if (summary.getRecordCount() == 0 || summary.getFirstRecordDate() == null) {
+            return new RecordSummaryResponse(0, 0);
+        }
+        LocalDate today = LocalDate.now(clock.withZone(SEOUL));
+        long recordingDayCount = ChronoUnit.DAYS.between(summary.getFirstRecordDate(), today) + 1;
+        return new RecordSummaryResponse(summary.getRecordCount(), recordingDayCount);
+    }
 
     /** 회원의 특정 연도 전체 기록을 최신순 cursor 페이지로 조회한다. */
     public RecordCursorPageResponse findAll(Long memberId, int year, String encodedCursor, int size) {
