@@ -7,6 +7,7 @@ import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordListItemResponse;
+import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
 import com.gyejoldanji.domain.record.service.RecordQueryService;
 import com.gyejoldanji.global.common.enums.SeasonType;
@@ -150,6 +151,13 @@ class RecordControllerTest {
         when(recordQueryService.findAll(42L, 2026, null, 20)).thenReturn(page);
         when(recordQueryService.findBySeason(42L, 2026, SeasonType.AUTUMN, null, 5)).thenReturn(page);
         when(recordQueryService.findDetail(42L, 101L)).thenReturn(response());
+        when(recordQueryService.findSummary(42L)).thenReturn(new RecordSummaryResponse(3, 12));
+
+        mockMvc.perform(get(RECORDS + "/summary").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.recordCount").value(3))
+                .andExpect(jsonPath("$.data.recordingDayCount").value(12));
 
         mockMvc.perform(get(RECORDS).header("Authorization", authorization).param("year", "2026"))
                 .andExpect(status().isOk())
@@ -170,6 +178,10 @@ class RecordControllerTest {
 
     @Test
     void rejectsUnauthenticatedQueriesAndInvalidParametersBeforeService() throws Exception {
+        mockMvc.perform(get(RECORDS + "/summary"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("COMMON_005"));
+
         mockMvc.perform(get(RECORDS).param("year", "2026"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("COMMON_005"));
@@ -212,7 +224,8 @@ class RecordControllerTest {
 
     @Test
     void documentsEveryCommandWithOperationAndResponses() {
-        List<String> methodNames = List.of("findAll", "findBySeason", "findDetail", "create", "update", "delete");
+        List<String> methodNames = List.of("findSummary", "findAll", "findBySeason", "findDetail", "create",
+                "update", "delete");
         for (Method method : RecordController.class.getDeclaredMethods()) {
             if (methodNames.contains(method.getName())) {
                 assertThat(method.getAnnotation(Operation.class)).as(method.getName()).isNotNull();

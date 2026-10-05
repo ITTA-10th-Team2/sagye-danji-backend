@@ -6,6 +6,7 @@ import com.gyejoldanji.domain.image.repository.ImageRepository;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
+import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.domain.record.repository.RecordRepository;
 import com.gyejoldanji.global.common.enums.SeasonType;
@@ -20,7 +21,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,8 +47,41 @@ class RecordQueryServiceTest {
     private ImageRepository imageRepository;
     @Mock
     private RecordCursorCodec cursorCodec;
+    @Mock
+    private Clock clock;
     @InjectMocks
     private RecordQueryService service;
+
+    @Test
+    void summaryCountsFirstRecordDayInclusivelyInSeoul() {
+        RecordRepository.RecordSummaryProjection projection = summary(3, LocalDate.of(2026, 9, 24));
+        when(recordRepository.summarizeByMemberId(42L)).thenReturn(projection);
+        when(clock.withZone(ZoneId.of("Asia/Seoul")))
+                .thenReturn(Clock.fixed(Instant.parse("2026-10-04T15:30:00Z"), ZoneId.of("Asia/Seoul")));
+
+        RecordSummaryResponse response = service.findSummary(42L);
+
+        assertThat(response.recordCount()).isEqualTo(3);
+        assertThat(response.recordingDayCount()).isEqualTo(12);
+    }
+
+    @Test
+    void summaryReturnsOneOnFirstRecordDay() {
+        RecordRepository.RecordSummaryProjection projection = summary(1, LocalDate.of(2026, 10, 5));
+        when(recordRepository.summarizeByMemberId(42L)).thenReturn(projection);
+        when(clock.withZone(ZoneId.of("Asia/Seoul")))
+                .thenReturn(Clock.fixed(Instant.parse("2026-10-04T15:30:00Z"), ZoneId.of("Asia/Seoul")));
+
+        assertThat(service.findSummary(42L).recordingDayCount()).isEqualTo(1);
+    }
+
+    @Test
+    void summaryReturnsZerosWhenMemberHasNoRecord() {
+        when(recordRepository.summarizeByMemberId(42L)).thenReturn(summary(0, null));
+
+        assertThat(service.findSummary(42L)).isEqualTo(new RecordSummaryResponse(0, 0));
+        verifyNoInteractions(clock);
+    }
 
     @Test
     void returnsRequestedSizeAndBuildsNextCursorFromLastItem() {
@@ -139,5 +176,19 @@ class RecordQueryServiceTest {
         Image image = Image.create(record, "record-images/" + id + ".jpg", null, PhotoSource.CAMERA, order);
         ReflectionTestUtils.setField(image, "id", id);
         return image;
+    }
+
+    private static RecordRepository.RecordSummaryProjection summary(long count, LocalDate firstDate) {
+        return new RecordRepository.RecordSummaryProjection() {
+            @Override
+            public long getRecordCount() {
+                return count;
+            }
+
+            @Override
+            public LocalDate getFirstRecordDate() {
+                return firstDate;
+            }
+        };
     }
 }

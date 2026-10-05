@@ -3,6 +3,7 @@ package com.gyejoldanji.domain.record.controller;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
 import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
+import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.dto.RecordUpdateRequest;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
 import com.gyejoldanji.domain.record.service.RecordQueryService;
@@ -48,6 +49,24 @@ public class RecordController {
 
     private final RecordCommandService recordCommandService;
     private final RecordQueryService recordQueryService;
+
+    /** 현재 회원의 전체 기록 수와 첫 기록일부터 오늘까지의 누적 일수를 조회한다. */
+    @Operation(summary = "홈 기록 요약 조회",
+            description = "현재 회원의 전체 기록 수와 첫 기록일부터 서울 기준 오늘까지의 일수를 조회합니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "요약 조회 성공",
+                    content = @Content(schema = @Schema(implementation = RecordSummaryResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/summary")
+    public ApiResponse<RecordSummaryResponse> findSummary(
+            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
+            HttpServletResponse response) {
+        noStore(response);
+        return ApiResponse.ok("홈 기록 요약 조회에 성공했습니다.",
+                recordQueryService.findSummary(currentMember.memberId()));
+    }
 
     /** 현재 회원의 특정 연도 전체 기록을 최신순 cursor 페이지로 조회한다. */
     @Operation(summary = "전체 기록 목록 조회",
