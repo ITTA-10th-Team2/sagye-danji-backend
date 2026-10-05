@@ -28,12 +28,19 @@ spring:
         type:
           java_time_use_direct_jdbc: true
 
+# nginx(TLS 종료) 뒤에서 X-Forwarded-Proto·Host·For를 반영해 https 운영 주소로 URL을 만든다.
+# app 컨테이너는 외부 포트를 열지 않아 nginx만 이 헤더를 보낼 수 있다.
+server:
+  forward-headers-strategy: framework
+
 app:
   swagger:
     # false면 아래 springdoc 설정으로 api-docs·swagger-ui 자체를 끈다(SecurityConfig의 경로 허용과는 무관).
     enabled: ${SWAGGER_ENABLED:true}
-    server-url: http://localhost:8080
-    server-description: Local
+    # 비우면(기본) 요청 주소로 서버 URL을 만든다: 로컬은 http://localhost:8080, 운영은 nginx의 X-Forwarded-*로
+    # https://api.sagye-danji.site. 특정 주소로 고정할 때만 SWAGGER_SERVER_URL을 지정한다.
+    server-url: ${SWAGGER_SERVER_URL:}
+    server-description: ${SWAGGER_SERVER_DESCRIPTION:}
   # 브라우저 요청을 허용할 실제 FE Origin(AppProperties, 쉼표 구분). 비면 기동 실패. wildcard·자리표시자는 거부하며
   # toss.identity-environment=PROD에서는 https 실제 주소만 받는다(localhost 불가).
   cors:
