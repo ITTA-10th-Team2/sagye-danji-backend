@@ -5,7 +5,10 @@ import com.gyejoldanji.domain.auth.repository.AuthSessionRepository.Authenticati
 import com.gyejoldanji.domain.auth.service.ServiceTokenService;
 import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
+import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
+import com.gyejoldanji.domain.record.dto.RecordListItemResponse;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
+import com.gyejoldanji.domain.record.service.RecordQueryService;
 import com.gyejoldanji.global.common.enums.SeasonType;
 import com.gyejoldanji.global.security.CurrentMember;
 import com.gyejoldanji.global.security.SecurityTestConfig;
@@ -39,6 +42,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -61,6 +65,8 @@ class RecordControllerTest {
     private AuthSessionRepository sessionRepository;
     @MockitoBean
     private RecordCommandService recordCommandService;
+    @MockitoBean
+    private RecordQueryService recordQueryService;
     @Autowired
     private ServiceTokenService tokenService;
     @Autowired
@@ -136,6 +142,55 @@ class RecordControllerTest {
     }
 
     @Test
+    void readsAllSeasonAndDetailWithAuthenticatedMember() throws Exception {
+        RecordCursorPageResponse page = new RecordCursorPageResponse(List.of(
+                new RecordListItemResponse(101L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN, "가을밤 🍂",
+                        new RecordListItemResponse.CoverImageResponse(501L,
+                                com.gyejoldanji.domain.image.enums.PhotoSource.CAMERA, 0), 1)), null, false);
+        when(recordQueryService.findAll(42L, 2026, null, 20)).thenReturn(page);
+        when(recordQueryService.findBySeason(42L, 2026, SeasonType.AUTUMN, null, 5)).thenReturn(page);
+        when(recordQueryService.findDetail(42L, 101L)).thenReturn(response());
+
+        mockMvc.perform(get(RECORDS).header("Authorization", authorization).param("year", "2026"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.items[0].id").value(101))
+                .andExpect(jsonPath("$.data.hasNext").value(false));
+
+        mockMvc.perform(get(RECORDS + "/seasons/AUTUMN")
+                        .header("Authorization", authorization).param("year", "2026"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].season").value("AUTUMN"));
+
+        mockMvc.perform(get(RECORDS + "/101").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(101))
+                .andExpect(jsonPath("$.data.images[0].id").value(501));
+    }
+
+    @Test
+    void rejectsUnauthenticatedQueriesAndInvalidParametersBeforeService() throws Exception {
+        mockMvc.perform(get(RECORDS).param("year", "2026"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("COMMON_005"));
+
+        mockMvc.perform(get(RECORDS).header("Authorization", authorization)
+                        .param("year", "1999").param("size", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_001"));
+
+        mockMvc.perform(get(RECORDS + "/seasons/FALL").header("Authorization", authorization)
+                        .param("year", "2026"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_001"));
+
+        mockMvc.perform(get(RECORDS + "/seasons/AUTUMN").header("Authorization", authorization)
+                        .param("year", "2026").param("size", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_001"));
+    }
+
+    @Test
     void allowsPatchAndDeleteCorsPreflightOnlyForConfiguredOrigin() throws Exception {
         for (String method : List.of("PATCH", "DELETE")) {
             mockMvc.perform(options(RECORDS + "/101")
@@ -157,7 +212,7 @@ class RecordControllerTest {
 
     @Test
     void documentsEveryCommandWithOperationAndResponses() {
-        List<String> methodNames = List.of("create", "update", "delete");
+        List<String> methodNames = List.of("findAll", "findBySeason", "findDetail", "create", "update", "delete");
         for (Method method : RecordController.class.getDeclaredMethods()) {
             if (methodNames.contains(method.getName())) {
                 assertThat(method.getAnnotation(Operation.class)).as(method.getName()).isNotNull();
