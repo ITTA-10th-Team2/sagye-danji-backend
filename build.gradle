@@ -68,6 +68,10 @@ dependencies {
     implementation 'com.google.apis:google-api-services-sheets:v4-rev20260921-2.0.0'
     implementation 'com.google.auth:google-auth-library-oauth2-http:1.54.0'
 
+    // AWS S3 (이미지 저장소, Presigned URL)
+    implementation platform('software.amazon.awssdk:bom:2.55.11')
+    implementation 'software.amazon.awssdk:s3'
+
     // Swagger (OpenAPI)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'
 

@@ -53,6 +53,11 @@ public enum ErrorCode {
 
     // Image
     IMAGE_ALREADY_ATTACHED(HttpStatus.CONFLICT, "IMAGE_001", "이미 사용 중인 이미지입니다."),
+    IMAGE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "IMAGE_002", "지원하지 않는 이미지 형식입니다."),
+    IMAGE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "IMAGE_003", "이미지 크기가 허용 범위를 초과했습니다."),
+    IMAGE_OWNERSHIP_MISMATCH(HttpStatus.FORBIDDEN, "IMAGE_004", "현재 회원이 업로드한 이미지가 아닙니다."),
+    IMAGE_NOT_UPLOADED(HttpStatus.BAD_REQUEST, "IMAGE_005", "업로드가 완료되지 않은 이미지입니다."),
+    IMAGE_STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "IMAGE_006", "이미지 저장소에 일시적으로 접근할 수 없습니다."),
 
     // Content Sync
     CONTENT_SYNC_INVALID_ROW(

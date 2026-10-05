@@ -3,6 +3,7 @@ package com.gyejoldanji.domain.record.service;
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.enums.PhotoSource;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
+import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -47,6 +49,8 @@ class RecordCommandServiceTest {
     private ImageRepository imageRepository;
     @Mock
     private MemberRepository memberRepository;
+    @Mock
+    private ImageStorageService imageStorageService;
 
     private RecordCommandService service;
 
@@ -54,7 +58,7 @@ class RecordCommandServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-10-03T16:30:00Z"), ZoneOffset.UTC);
         service = new RecordCommandService(
-                recordRepository, imageRepository, memberRepository, new SeasonResolver(), clock);
+                recordRepository, imageRepository, memberRepository, imageStorageService, new SeasonResolver(), clock);
     }
 
     @Test
@@ -84,8 +88,48 @@ class RecordCommandServiceTest {
         assertThat(response.recordDate()).isEqualTo(LocalDate.of(2026, 10, 4));
         assertThat(response.season()).isEqualTo(SeasonType.AUTUMN);
         assertThat(response.images()).extracting(RecordResponse.ImageResponse::sortOrder).containsExactly(0, 1);
+        verify(imageStorageService).validateUploadedObjects(42L,
+                List.of("record-images/42/a.jpg", "record-images/42/b.webp"));
         verify(imageRepository).flush();
         verify(recordRepository).flush();
+    }
+
+    @Test
+    void rejectsUnverifiedUploadBeforeDatabaseWrites() {
+        when(imageRepository.existsByOriginalKeyIn(any())).thenReturn(false);
+        doThrow(new BusinessException(ErrorCode.IMAGE_OWNERSHIP_MISMATCH))
+                .when(imageStorageService).validateUploadedObjects(42L, List.of("record-images/43/a.jpg"));
+        RecordCreateRequest request = new RecordCreateRequest(LocalDate.of(2026, 10, 4), null, List.of(
+                new RecordCreateRequest.ImageItem("record-images/43/a.jpg", PhotoSource.CAMERA, 0)));
+
+        assertThatThrownBy(() -> service.create(42L, request))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.IMAGE_OWNERSHIP_MISMATCH));
+
+        verifyNoInteractions(memberRepository, recordRepository);
+        verify(imageRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void validatesOnlyNewKeysAndSchedulesRemovedImageDeletionOnUpdate() {
+        Member member = member(42L);
+        Record record = record(member, 100L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN);
+        Image kept = image(record, 501L, "record-images/42/a.jpg", 0);
+        Image removed = image(record, 502L, "record-images/42/b.jpg", 1);
+        when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
+        when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(kept, removed));
+        when(imageRepository.existsByOriginalKeyIn(any())).thenReturn(false);
+        when(imageRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        RecordUpdateRequest request = new RecordUpdateRequest(LocalDate.of(2026, 10, 4), null, List.of(
+                new RecordUpdateRequest.ImageItem(RecordUpdateRequest.Type.EXISTING, 501L, null, null, 0),
+                new RecordUpdateRequest.ImageItem(RecordUpdateRequest.Type.NEW, null, "record-images/42/c.jpg",
+                        PhotoSource.GALLERY, 1)));
+
+        service.update(42L, 100L, request);
+
+        verify(imageStorageService).validateUploadedObjects(42L, List.of("record-images/42/c.jpg"));
+        verify(imageStorageService).scheduleDeletionAfterCommit(List.of(removed));
     }
 
     @Test
@@ -177,6 +221,7 @@ class RecordCommandServiceTest {
         verify(imageRepository).flush();
         verify(recordRepository).delete(record);
         verify(recordRepository).flush();
+        verify(imageStorageService).scheduleDeletionAfterCommit(images);
     }
 
     private static Member member(Long id) {

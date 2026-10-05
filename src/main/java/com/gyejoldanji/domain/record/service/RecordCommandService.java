@@ -2,6 +2,7 @@ package com.gyejoldanji.domain.record.service;
 
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
+import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
@@ -44,6 +45,7 @@ public class RecordCommandService {
     private final RecordRepository recordRepository;
     private final ImageRepository imageRepository;
     private final MemberRepository memberRepository;
+    private final ImageStorageService imageStorageService;
     private final SeasonResolver seasonResolver;
     private final Clock clock;
 
@@ -56,7 +58,7 @@ public class RecordCommandService {
         List<String> objectKeys = request.images().stream().map(RecordCreateRequest.ImageItem::objectKey).toList();
         rejectAttachedKeys(objectKeys);
 
-        // TODO(infra): ImageStorageClient 연동 후 현재 회원의 객체인지와 존재·MIME·크기를 검증한다.
+        imageStorageService.validateUploadedObjects(memberId, objectKeys);
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
         LocalDate recordDate = request.recordDate() == null
@@ -118,7 +120,7 @@ public class RecordCommandService {
 
         List<String> newKeys = newItems.stream().map(RecordUpdateRequest.ImageItem::objectKey).toList();
         rejectAttachedKeys(newKeys);
-        // TODO(infra): ImageStorageClient 연동 후 NEW 객체의 소유권과 존재·MIME·크기를 검증한다.
+        imageStorageService.validateUploadedObjects(memberId, newKeys);
 
         try {
             moveToTemporaryOrders(retained, currentImages);
@@ -129,7 +131,7 @@ public class RecordCommandService {
                     .toList();
             imageRepository.deleteAll(removed);
             imageRepository.flush();
-            // TODO(infra): DB commit 이후 removed의 원본·썸네일 객체를 정리한다.
+            imageStorageService.scheduleDeletionAfterCommit(removed);
 
             Map<Long, Integer> finalExistingOrders = new HashMap<>();
             request.images().stream()
@@ -163,7 +165,7 @@ public class RecordCommandService {
         imageRepository.flush();
         recordRepository.delete(record);
         recordRepository.flush();
-        // TODO(infra): DB commit 이후 삭제된 이미지의 원본·썸네일 객체를 정리한다.
+        imageStorageService.scheduleDeletionAfterCommit(images);
     }
 
     /** 회원 소유권을 조회 조건에 포함해 없는 기록과 다른 회원 기록을 같은 404로 처리한다. */
@@ -249,7 +251,7 @@ public class RecordCommandService {
         }
     }
 
-    /** object key의 DB 저장 범위만 검증하며 실제 S3 검증은 인프라 TODO로 남긴다. */
+    /** object key의 DB 저장 범위만 검증한다. 소유권·존재·형식·크기는 {@link ImageStorageService#validateUploadedObjects}가 검증한다. */
     private void validateObjectKey(String objectKey) {
         if (!StringUtils.hasText(objectKey) || objectKey.length() > MAX_OBJECT_KEY_LENGTH) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
