@@ -1,11 +1,15 @@
 package com.gyejoldanji.domain.record.controller;
 
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
+import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
+import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.dto.RecordUpdateRequest;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
+import com.gyejoldanji.domain.record.service.RecordQueryService;
 import com.gyejoldanji.global.common.response.ApiResponse;
 import com.gyejoldanji.global.common.response.ErrorResponse;
+import com.gyejoldanji.global.common.enums.SeasonType;
 import com.gyejoldanji.global.security.CurrentMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,6 +20,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -23,16 +29,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 인증된 회원의 기록과 이미지 메타데이터를 함께 생성·수정·삭제하는 command API. */
-@Tag(name = "Record", description = "사진 기록 생성·수정·삭제 API")
+/** 인증된 회원의 기록과 이미지 메타데이터를 조회·생성·수정·삭제하는 API. */
+@Tag(name = "Record", description = "사진 기록 조회·생성·수정·삭제 API")
 @Validated
 @RestController
 @RequestMapping("/api/records")
@@ -40,6 +48,102 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecordController {
 
     private final RecordCommandService recordCommandService;
+    private final RecordQueryService recordQueryService;
+
+    /** 현재 회원의 전체 기록 수와 첫 기록일부터 오늘까지의 누적 일수를 조회한다. */
+    @Operation(summary = "홈 기록 요약 조회",
+            description = "현재 회원의 전체 기록 수와 첫 기록일부터 서울 기준 오늘까지의 일수를 조회합니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "요약 조회 성공",
+                    content = @Content(schema = @Schema(implementation = RecordSummaryResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/summary")
+    public ApiResponse<RecordSummaryResponse> findSummary(
+            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
+            HttpServletResponse response) {
+        noStore(response);
+        return ApiResponse.ok("홈 기록 요약 조회에 성공했습니다.",
+                recordQueryService.findSummary(currentMember.memberId()));
+    }
+
+    /** 현재 회원의 특정 연도 전체 기록을 최신순 cursor 페이지로 조회한다. */
+    @Operation(summary = "전체 기록 목록 조회",
+            description = "특정 연도의 내 기록을 recordDate DESC, id DESC 순서로 cursor 조회합니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = RecordCursorPageResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "연도·크기·커서 검증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping
+    public ApiResponse<RecordCursorPageResponse> findAll(
+            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
+            @Parameter(description = "조회할 달력 연도", example = "2026")
+            @RequestParam @Min(2000) @Max(2100) int year,
+            @Parameter(description = "이전 응답의 nextCursor", example = "MjAyNi0xMC0wNHwxMDE")
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "페이지 크기(1~50)", example = "20")
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            HttpServletResponse response) {
+        noStore(response);
+        return ApiResponse.ok("기록 목록 조회에 성공했습니다.",
+                recordQueryService.findAll(currentMember.memberId(), year, cursor, size));
+    }
+
+    /** 현재 회원의 특정 연도·계절 단지 기록을 최신순 cursor 페이지로 조회한다. */
+    @Operation(summary = "계절 단지 기록 목록 조회",
+            description = "특정 연도와 계절의 내 기록을 cursor 기반으로 조회합니다. 기본 페이지 크기는 5개입니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "단지 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = RecordCursorPageResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "연도·계절·커서 검증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/seasons/{season}")
+    public ApiResponse<RecordCursorPageResponse> findBySeason(
+            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
+            @Parameter(description = "조회할 계절", example = "AUTUMN")
+            @PathVariable SeasonType season,
+            @Parameter(description = "조회할 달력 연도", example = "2026")
+            @RequestParam @Min(2000) @Max(2100) int year,
+            @Parameter(description = "이전 응답의 nextCursor", example = "MjAyNi0xMC0wNHwxMDE")
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "페이지 크기(1~50)", example = "5")
+            @RequestParam(defaultValue = "5") @Min(1) @Max(50) int size,
+            HttpServletResponse response) {
+        noStore(response);
+        return ApiResponse.ok("계절 단지 기록 목록 조회에 성공했습니다.",
+                recordQueryService.findBySeason(currentMember.memberId(), year, season, cursor, size));
+    }
+
+    /** 현재 회원이 소유한 기록과 정렬된 이미지 메타데이터를 상세 조회한다. */
+    @Operation(summary = "기록 상세 조회", description = "현재 회원이 소유한 기록과 이미지 정보를 조회합니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상세 조회 성공",
+                    content = @Content(schema = @Schema(implementation = RecordResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 기록 ID",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "소유한 기록 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{recordId}")
+    public ApiResponse<RecordResponse> findDetail(
+            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
+            @Parameter(description = "조회할 양수 기록 ID", example = "101")
+            @PathVariable @Positive Long recordId,
+            HttpServletResponse response) {
+        noStore(response);
+        return ApiResponse.ok("기록 상세 조회에 성공했습니다.",
+                recordQueryService.findDetail(currentMember.memberId(), recordId));
+    }
 
     /** 업로드를 마친 객체 키들로 기록과 이미지 메타데이터를 생성한다. */
     @Operation(summary = "기록 생성", description = "현재 회원의 날짜·메모와 1~10개 이미지 메타데이터를 저장합니다.")

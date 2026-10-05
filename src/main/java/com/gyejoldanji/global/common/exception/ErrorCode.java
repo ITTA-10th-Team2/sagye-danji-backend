@@ -50,9 +50,15 @@ public enum ErrorCode {
     RECORD_IMAGE_REQUIRED(HttpStatus.BAD_REQUEST, "RECORD_002", "기록에는 이미지가 한 장 이상 필요합니다."),
     RECORD_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "RECORD_003", "기록에 첨부할 수 있는 이미지 수를 초과했습니다."),
     RECORD_IMAGE_ORDER_INVALID(HttpStatus.BAD_REQUEST, "RECORD_004", "이미지 표시 순서가 올바르지 않습니다."),
+    RECORD_CURSOR_INVALID(HttpStatus.BAD_REQUEST, "RECORD_005", "기록 조회 커서가 올바르지 않습니다."),
 
     // Image
     IMAGE_ALREADY_ATTACHED(HttpStatus.CONFLICT, "IMAGE_001", "이미 사용 중인 이미지입니다."),
+    IMAGE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "IMAGE_002", "지원하지 않는 이미지 형식입니다."),
+    IMAGE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "IMAGE_003", "이미지 크기가 허용 범위를 초과했습니다."),
+    IMAGE_OWNERSHIP_MISMATCH(HttpStatus.FORBIDDEN, "IMAGE_004", "현재 회원이 업로드한 이미지가 아닙니다."),
+    IMAGE_NOT_UPLOADED(HttpStatus.BAD_REQUEST, "IMAGE_005", "업로드가 완료되지 않은 이미지입니다."),
+    IMAGE_STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "IMAGE_006", "이미지 저장소에 일시적으로 접근할 수 없습니다."),
 
     // Content Sync
     CONTENT_SYNC_INVALID_ROW(
