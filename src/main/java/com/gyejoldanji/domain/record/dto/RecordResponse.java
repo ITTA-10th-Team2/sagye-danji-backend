@@ -12,8 +12,8 @@ import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 
-/** 저장을 마친 기록과 이미지 메타데이터를 반환하는 command 응답. */
-@Schema(description = "기록 생성·수정 결과")
+/** 기록 상세와 저장 결과에 사용하는 기록·이미지 메타데이터 응답. */
+@Schema(description = "기록 상세 정보")
 public record RecordResponse(
         @Schema(description = "기록 ID. 수정·삭제 API의 recordId로 사용", example = "1") Long id,
         @Schema(description = "기록 날짜", example = "2026-10-04") LocalDate recordDate,

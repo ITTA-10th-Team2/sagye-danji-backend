@@ -20,4 +20,16 @@ public interface ImageRepository extends JpaRepository<Image, Long> {
 
     /** 주어진 객체 키 중 이미 연결된 키가 하나라도 있는지 확인한다. */
     boolean existsByOriginalKeyIn(Collection<String> originalKeys);
+
+    /** 목록 페이지의 모든 이미지를 한 번에 읽어 기록별 반복 조회를 방지한다. */
+    @Query("""
+            select i from Image i
+            where i.record.id in :recordIds
+            order by i.record.id asc, i.sortOrder asc
+            """)
+    List<Image> findAllByRecordIds(@Param("recordIds") Collection<Long> recordIds);
+
+    /** 기록 상세 이미지를 화면 표시 순서대로 조회한다. */
+    @Query("select i from Image i where i.record.id = :recordId order by i.sortOrder asc")
+    List<Image> findAllByRecordIdOrderBySortOrderAsc(@Param("recordId") Long recordId);
 }

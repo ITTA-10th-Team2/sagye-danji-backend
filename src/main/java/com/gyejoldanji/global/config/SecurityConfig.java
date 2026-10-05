@@ -102,6 +102,8 @@ public class SecurityConfig {
 
                     auth.requestMatchers(HttpMethod.GET, "/api/members/me").authenticated();
                     auth.requestMatchers(HttpMethod.POST, "/api/members/me/onboarding/complete").authenticated();
+                    auth.requestMatchers(HttpMethod.GET,
+                            "/api/records", "/api/records/*", "/api/records/seasons/*").authenticated();
                     auth.requestMatchers(HttpMethod.POST, "/api/records").authenticated();
                     auth.requestMatchers(HttpMethod.PATCH, "/api/records/*").authenticated();
                     auth.requestMatchers(HttpMethod.DELETE, "/api/records/*").authenticated();
