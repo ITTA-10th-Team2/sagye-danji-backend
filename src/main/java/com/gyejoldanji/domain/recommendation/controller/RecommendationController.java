@@ -1,5 +1,6 @@
 package com.gyejoldanji.domain.recommendation.controller;
 
+import com.gyejoldanji.domain.recommendation.dto.TodayRecommendationApiResponse;
 import com.gyejoldanji.domain.recommendation.dto.TodayRecommendationResponse;
 import com.gyejoldanji.domain.recommendation.service.TodayRecommendationService;
 import com.gyejoldanji.global.common.response.ApiResponse;
@@ -29,7 +30,7 @@ public class RecommendationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
                     description = "오늘의 추천 조회 성공",
-                    content = @Content(schema = @Schema(implementation = TodayRecommendationResponse.class))),
+                    content = @Content(schema = @Schema(implementation = TodayRecommendationApiResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "404",
                     description = "오늘 노출할 승인 추천 없음",

@@ -1,6 +1,8 @@
 package com.gyejoldanji.domain.recommendation.controller;
 
+import com.gyejoldanji.domain.recommendation.dto.TodayRecommendationApiResponse;
 import com.gyejoldanji.domain.recommendation.dto.TodayRecommendationResponse;
+import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -25,6 +27,22 @@ class RecommendationControllerSwaggerTest {
         assertThat(responses).isNotNull();
         assertThat(responses.value()).extracting(response -> response.responseCode())
                 .containsExactlyInAnyOrder("200", "404");
+
+        Class<?> successSchema = Arrays.stream(responses.value())
+                .filter(response -> response.responseCode().equals("200"))
+                .findFirst()
+                .map(io.swagger.v3.oas.annotations.responses.ApiResponse::content)
+                .stream()
+                .flatMap(Arrays::stream)
+                .map(Content::schema)
+                .map(Schema::implementation)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(successSchema).isEqualTo(TodayRecommendationApiResponse.class);
+        assertThat(Arrays.stream(TodayRecommendationApiResponse.class.getRecordComponents())
+                .map(RecordComponent::getName))
+                .containsExactly("success", "code", "message", "data");
     }
 
     @Test
