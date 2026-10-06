@@ -51,6 +51,10 @@ public enum ErrorCode {
     RECORD_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "RECORD_003", "기록에 첨부할 수 있는 이미지 수를 초과했습니다."),
     RECORD_IMAGE_ORDER_INVALID(HttpStatus.BAD_REQUEST, "RECORD_004", "이미지 표시 순서가 올바르지 않습니다."),
     RECORD_CURSOR_INVALID(HttpStatus.BAD_REQUEST, "RECORD_005", "기록 조회 커서가 올바르지 않습니다."),
+    RECORD_IMAGE_INTEGRITY_VIOLATION(HttpStatus.CONFLICT, "RECORD_006", "기록 이미지 데이터가 올바르지 않습니다."),
+
+    // Jar
+    JAR_PAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "JAR_001", "단지 페이지를 찾을 수 없습니다."),
 
     // Image
     IMAGE_ALREADY_ATTACHED(HttpStatus.CONFLICT, "IMAGE_001", "이미 사용 중인 이미지입니다."),

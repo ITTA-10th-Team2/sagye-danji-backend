@@ -5,9 +5,7 @@ import com.gyejoldanji.domain.auth.repository.AuthSessionRepository.Authenticati
 import com.gyejoldanji.domain.auth.service.ServiceTokenService;
 import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
-import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordImageResponse;
-import com.gyejoldanji.domain.record.dto.RecordListItemResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.dto.SeasonRecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.SeasonRecordListItemResponse;
@@ -105,7 +103,7 @@ class RecordControllerTest {
                                 {
                                   "recordDate":"2026-10-04",
                                   "memo":"가을밤 🍂",
-                                  "images":[{"objectKey":"record-images/42/a.jpg","source":"CAMERA","sortOrder":0}]
+                                  "objectKey":"record-images/42/a.jpg"
                                 }
                                 """))
                 .andExpect(status().isCreated())
@@ -115,14 +113,14 @@ class RecordControllerTest {
                 .andExpect(jsonPath("$.code").value("201"))
                 .andExpect(jsonPath("$.data.id").value(101))
                 .andExpect(jsonPath("$.data.season").value("AUTUMN"))
-                .andExpect(jsonPath("$.data.images[0].id").value(501));
+                .andExpect(jsonPath("$.data.image.id").value(501));
     }
 
     @Test
     void rejectsUnauthenticatedCreateBeforeService() throws Exception {
         mockMvc.perform(post(RECORDS)
                         .contentType("application/json")
-                        .content("{\"images\":[]}"))
+                        .content("{\"objectKey\":\"record-images/42/a.jpg\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("COMMON_005"));
 
@@ -146,29 +144,16 @@ class RecordControllerTest {
     }
 
     @Test
-    void readsAllSeasonAndDetailWithAuthenticatedMember() throws Exception {
-        RecordCursorPageResponse page = new RecordCursorPageResponse(List.of(
-                new RecordListItemResponse(101L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN, "가을밤 🍂",
-                        new RecordImageResponse(501L,
-                                com.gyejoldanji.domain.image.enums.PhotoSource.CAMERA, 0,
-                                "https://storage.example/original.jpg",
-                                "https://storage.example/thumbnail.jpg"), 1)), null, false);
+    void readsSeasonAndDetailWithAuthenticatedMember() throws Exception {
         SeasonRecordCursorPageResponse seasonPage = new SeasonRecordCursorPageResponse(List.of(
                 new SeasonRecordListItemResponse(101L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN, "가을밤 🍂",
-                        List.of(
-                                new RecordImageResponse(501L,
-                                        com.gyejoldanji.domain.image.enums.PhotoSource.CAMERA, 0,
-                                        "https://storage.example/original-1.jpg",
-                                        "https://storage.example/thumbnail-1.jpg"),
-                                new RecordImageResponse(502L,
-                                        com.gyejoldanji.domain.image.enums.PhotoSource.GALLERY, 1,
-                                        "https://storage.example/original-2.jpg",
-                                        "https://storage.example/original-2.jpg")),
-                        5)), null, false);
-        when(recordQueryService.findAll(42L, 2026, null, 20)).thenReturn(page);
-        when(recordQueryService.findBySeason(42L, 2026, SeasonType.AUTUMN, null, 5)).thenReturn(seasonPage);
+                        new RecordImageResponse(501L, "https://storage.example/original-1.jpg",
+                                "https://storage.example/thumbnail-1.jpg"))), null, false);
+        when(recordQueryService.findBySeason(42L, 2026, SeasonType.AUTUMN, null, 20)).thenReturn(seasonPage);
         when(recordQueryService.findDetail(42L, 101L)).thenReturn(response());
-        when(recordQueryService.findSummary(42L)).thenReturn(new RecordSummaryResponse(3, 12));
+        when(recordQueryService.findSummary(42L)).thenReturn(new RecordSummaryResponse(3, 12,
+                java.util.Map.of(SeasonType.SPRING, 0L, SeasonType.SUMMER, 0L,
+                        SeasonType.AUTUMN, 3L, SeasonType.WINTER, 0L)));
 
         mockMvc.perform(get(RECORDS + "/summary").header("Authorization", authorization))
                 .andExpect(status().isOk())
@@ -176,34 +161,20 @@ class RecordControllerTest {
                 .andExpect(jsonPath("$.data.recordCount").value(3))
                 .andExpect(jsonPath("$.data.recordingDayCount").value(12));
 
-        mockMvc.perform(get(RECORDS).header("Authorization", authorization).param("year", "2026"))
-                .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.data.items[0].id").value(101))
-                .andExpect(jsonPath("$.data.items[0].coverImage.originalUrl")
-                        .value("https://storage.example/original.jpg"))
-                .andExpect(jsonPath("$.data.items[0].coverImage.thumbnailUrl")
-                        .value("https://storage.example/thumbnail.jpg"))
-                .andExpect(jsonPath("$.data.hasNext").value(false));
-
         mockMvc.perform(get(RECORDS + "/seasons/AUTUMN")
                         .header("Authorization", authorization).param("year", "2026"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].season").value("AUTUMN"))
-                .andExpect(jsonPath("$.data.items[0].previewImages.length()").value(2))
-                .andExpect(jsonPath("$.data.items[0].previewImages[0].thumbnailUrl")
-                        .value("https://storage.example/thumbnail-1.jpg"))
-                .andExpect(jsonPath("$.data.items[0].previewImages[1].thumbnailUrl")
-                        .value("https://storage.example/original-2.jpg"))
-                .andExpect(jsonPath("$.data.items[0].imageCount").value(5));
+                .andExpect(jsonPath("$.data.items[0].image.thumbnailUrl")
+                        .value("https://storage.example/thumbnail-1.jpg"));
 
         mockMvc.perform(get(RECORDS + "/101").header("Authorization", authorization))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(101))
-                .andExpect(jsonPath("$.data.images[0].id").value(501))
-                .andExpect(jsonPath("$.data.images[0].originalUrl")
+                .andExpect(jsonPath("$.data.image.id").value(501))
+                .andExpect(jsonPath("$.data.image.originalUrl")
                         .value("https://storage.example/original.jpg"))
-                .andExpect(jsonPath("$.data.images[0].thumbnailUrl")
+                .andExpect(jsonPath("$.data.image.thumbnailUrl")
                         .value("https://storage.example/thumbnail.jpg"));
     }
 
@@ -216,11 +187,6 @@ class RecordControllerTest {
         mockMvc.perform(get(RECORDS).param("year", "2026"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("COMMON_005"));
-
-        mockMvc.perform(get(RECORDS).header("Authorization", authorization)
-                        .param("year", "1999").param("size", "51"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("COMMON_001"));
 
         mockMvc.perform(get(RECORDS + "/seasons/FALL").header("Authorization", authorization)
                         .param("year", "2026"))
@@ -266,7 +232,7 @@ class RecordControllerTest {
     }
 
     @Test
-    void documentsUpdateImageTypeInRequestExamples() throws Exception {
+    void documentsSingleImageReplacementInRequestExamples() throws Exception {
         Method update = RecordController.class.getDeclaredMethod("update", CurrentMember.class, Long.class,
                 com.gyejoldanji.domain.record.dto.RecordUpdateRequest.class,
                 jakarta.servlet.http.HttpServletResponse.class);
@@ -276,8 +242,8 @@ class RecordControllerTest {
         assertThat(requestBody).isNotNull();
         assertThat(requestBody.content()[0].examples())
                 .extracting(ExampleObject::value)
-                .anySatisfy(value -> assertThat(value).contains("\"type\": \"EXISTING\"", "\"type\": \"NEW\""))
-                .anySatisfy(value -> assertThat(value).doesNotContain("\"images\""));
+                .anySatisfy(value -> assertThat(value).contains("\"objectKey\""))
+                .allSatisfy(value -> assertThat(value).doesNotContain("\"images\"", "\"imageId\"", "\"type\""));
     }
 
     @Test
@@ -291,10 +257,8 @@ class RecordControllerTest {
 
     private static RecordResponse response() {
         return new RecordResponse(101L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN, "가을밤 🍂",
-                List.of(new RecordImageResponse(501L,
-                        com.gyejoldanji.domain.image.enums.PhotoSource.CAMERA, 0,
-                        "https://storage.example/original.jpg",
-                        "https://storage.example/thumbnail.jpg")),
+                new RecordImageResponse(501L, "https://storage.example/original.jpg",
+                        "https://storage.example/thumbnail.jpg"),
                 "2026-10-03T17:10:00Z", "2026-10-03T17:10:00Z");
     }
 

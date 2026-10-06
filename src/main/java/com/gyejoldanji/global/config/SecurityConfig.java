@@ -103,11 +103,15 @@ public class SecurityConfig {
                     auth.requestMatchers(HttpMethod.GET, "/api/members/me").authenticated();
                     auth.requestMatchers(HttpMethod.POST, "/api/members/me/onboarding/complete").authenticated();
                     auth.requestMatchers(HttpMethod.GET,
-                            "/api/records", "/api/records/*", "/api/records/seasons/*").authenticated();
+                            "/api/records/*", "/api/records/seasons/*").authenticated();
                     auth.requestMatchers(HttpMethod.POST, "/api/records").authenticated();
                     auth.requestMatchers(HttpMethod.PATCH, "/api/records/*").authenticated();
                     auth.requestMatchers(HttpMethod.DELETE, "/api/records/*").authenticated();
                     auth.requestMatchers(HttpMethod.POST, "/api/images/presigned-url").authenticated();
+                    auth.requestMatchers(HttpMethod.GET, "/api/jar-pages", "/api/jar-pages/*/stickers")
+                            .authenticated();
+                    auth.requestMatchers(HttpMethod.PUT, "/api/jar-pages/*/stickers").authenticated();
+                    auth.requestMatchers(HttpMethod.DELETE, "/api/jar-pages/*/stickers").authenticated();
                     // 환경과 무관하게 경로는 열어 두고, 실제 응답 여부는 app.swagger.enabled로 springdoc 자체를 켜고 끈다.
                     auth.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
                             .permitAll();
@@ -146,7 +150,7 @@ public class SecurityConfig {
         }
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(origins);
-        cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE));
         cors.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         cors.setAllowCredentials(false);

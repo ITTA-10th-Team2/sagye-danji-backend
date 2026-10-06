@@ -5,7 +5,6 @@ import com.gyejoldanji.domain.image.enums.PhotoSource;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
 import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
-import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordImageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
@@ -84,41 +83,10 @@ class RecordQueryServiceTest {
     void summaryReturnsZerosWhenMemberHasNoRecord() {
         when(recordRepository.summarizeByMemberId(42L)).thenReturn(summary(0, null));
 
-        assertThat(service.findSummary(42L)).isEqualTo(new RecordSummaryResponse(0, 0));
+        assertThat(service.findSummary(42L)).isEqualTo(new RecordSummaryResponse(0, 0,
+                java.util.Map.of(SeasonType.SPRING, 0L, SeasonType.SUMMER, 0L,
+                        SeasonType.AUTUMN, 0L, SeasonType.WINTER, 0L)));
         verifyNoInteractions(clock);
-    }
-
-    @Test
-    void returnsRequestedSizeAndBuildsNextCursorFromLastItem() {
-        Record newest = record(103L, LocalDate.of(2026, 10, 5));
-        Record lastIncluded = record(102L, LocalDate.of(2026, 10, 4));
-        Record lookAhead = record(101L, LocalDate.of(2026, 10, 3));
-        when(recordRepository.findOwnedInDateRange(eq(42L), eq(LocalDate.of(2026, 1, 1)),
-                eq(LocalDate.of(2027, 1, 1)), any(Pageable.class)))
-                .thenReturn(List.of(newest, lastIncluded, lookAhead));
-        when(imageRepository.findAllByRecordIds(List.of(103L, 102L)))
-                .thenReturn(List.of(image(501L, newest, 0), image(502L, newest, 1),
-                        image(503L, lastIncluded, 0)));
-        when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
-                "https://storage.example/" + invocation.<String>getArgument(0));
-        when(cursorCodec.encode(lastIncluded.getRecordDate(), lastIncluded.getId())).thenReturn("next");
-
-        RecordCursorPageResponse response = service.findAll(42L, 2026, null, 2);
-
-        assertThat(response.items()).extracting(item -> item.id()).containsExactly(103L, 102L);
-        assertThat(response.items().getFirst().imageCount()).isEqualTo(2);
-        assertThat(response.items().getFirst().coverImage().id()).isEqualTo(501L);
-        assertThat(response.items().getFirst().coverImage().originalUrl())
-                .isEqualTo("https://storage.example/record-images/501.jpg");
-        assertThat(response.items().getFirst().coverImage().thumbnailUrl())
-                .isEqualTo(response.items().getFirst().coverImage().originalUrl());
-        assertThat(response.hasNext()).isTrue();
-        assertThat(response.nextCursor()).isEqualTo("next");
-
-        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(recordRepository).findOwnedInDateRange(eq(42L), any(), any(), pageable.capture());
-        assertThat(pageable.getValue().getPageSize()).isEqualTo(3);
-        verify(imageRepository).findAllByRecordIds(List.of(103L, 102L));
     }
 
     @Test
@@ -144,15 +112,13 @@ class RecordQueryServiceTest {
     }
 
     @Test
-    void seasonPageIncludesAtMostTwoPreviewImagesWithoutAdditionalRecordQueries() {
+    void seasonPageIncludesSingleImageWithoutAdditionalRecordQueries() {
         Record record = record(101L, LocalDate.of(2026, 10, 4));
         when(recordRepository.findOwnedBySeasonInDateRange(eq(42L), eq(SeasonType.AUTUMN),
                 eq(LocalDate.of(2026, 1, 1)), eq(LocalDate.of(2027, 1, 1)), any(Pageable.class)))
                 .thenReturn(List.of(record));
         when(imageRepository.findAllByRecordIds(List.of(101L))).thenReturn(List.of(
-                image(503L, record, 2),
-                image(501L, record, 0, "record-images/501-thumb.jpg"),
-                image(502L, record, 1)));
+                image(501L, record, 0, "record-images/501-thumb.jpg")));
         when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
                 "https://storage.example/" + invocation.<String>getArgument(0));
 
@@ -160,14 +126,9 @@ class RecordQueryServiceTest {
                 42L, 2026, SeasonType.AUTUMN, null, 5);
 
         assertThat(response.items()).hasSize(1);
-        assertThat(response.items().getFirst().previewImages())
-                .extracting(preview -> preview.id())
-                .containsExactly(501L, 502L);
-        assertThat(response.items().getFirst().imageCount()).isEqualTo(3);
-        assertThat(response.items().getFirst().previewImages().getFirst().thumbnailUrl())
+        assertThat(response.items().getFirst().image().id()).isEqualTo(501L);
+        assertThat(response.items().getFirst().image().thumbnailUrl())
                 .isEqualTo("https://storage.example/record-images/501-thumb.jpg");
-        assertThat(response.items().getFirst().previewImages().get(1).thumbnailUrl())
-                .isEqualTo(response.items().getFirst().previewImages().get(1).originalUrl());
         verify(imageRepository).findAllByRecordIds(List.of(101L));
     }
 
@@ -181,23 +142,21 @@ class RecordQueryServiceTest {
     }
 
     @Test
-    void detailReturnsImagesInRepositoryOrder() {
+    void detailReturnsSingleImage() {
         Record record = record(101L, LocalDate.of(2026, 10, 4));
         when(recordRepository.findOwnedById(101L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdOrderBySortOrderAsc(101L))
-                .thenReturn(List.of(image(502L, record, 0, "record-images/502-thumb.jpg"),
-                        image(501L, record, 1)));
+                .thenReturn(List.of(image(502L, record, 0, "record-images/502-thumb.jpg")));
         when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
                 "https://storage.example/" + invocation.<String>getArgument(0));
 
         RecordResponse response = service.findDetail(42L, 101L);
 
-        assertThat(response.images()).extracting(RecordImageResponse::id).containsExactly(502L, 501L);
-        assertThat(response.images().getFirst().originalUrl())
+        assertThat(response.image().id()).isEqualTo(502L);
+        assertThat(response.image().originalUrl())
                 .isEqualTo("https://storage.example/record-images/502.jpg");
-        assertThat(response.images().getFirst().thumbnailUrl())
+        assertThat(response.image().thumbnailUrl())
                 .isEqualTo("https://storage.example/record-images/502-thumb.jpg");
-        assertThat(response.images().get(1).thumbnailUrl()).isEqualTo(response.images().get(1).originalUrl());
         verify(imageRepository).findAllByRecordIdOrderBySortOrderAsc(101L);
     }
 
@@ -242,6 +201,11 @@ class RecordQueryServiceTest {
             public LocalDate getFirstRecordDate() {
                 return firstDate;
             }
+
+            @Override public long getSpringCount() { return 0; }
+            @Override public long getSummerCount() { return 0; }
+            @Override public long getAutumnCount() { return count; }
+            @Override public long getWinterCount() { return 0; }
         };
     }
 }

@@ -1,6 +1,7 @@
 package com.gyejoldanji.domain.record.entity;
 
 import com.gyejoldanji.domain.member.entity.Member;
+import com.gyejoldanji.domain.jar.entity.JarPage;
 import com.gyejoldanji.global.common.BaseTimeEntity;
 import com.gyejoldanji.global.common.enums.SeasonType;
 import jakarta.persistence.Column;
@@ -47,6 +48,11 @@ public class Record extends BaseTimeEntity {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Member member;
 
+    /** 단지 화면에서 이 기록이 고정적으로 속하는 최대 5개 단위 페이지. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "jar_page_id", nullable = false, foreignKey = @ForeignKey(name = "fk_records_jar_page"))
+    private JarPage jarPage;
+
     /** 한국 기준으로 표시할 기록 날짜. */
     @Column(name = "record_date", nullable = false)
     private LocalDate recordDate;
@@ -62,8 +68,13 @@ public class Record extends BaseTimeEntity {
 
     /** 회원의 날짜·계절·글을 가진 신규 기록을 생성한다. */
     public static Record create(Member member, LocalDate recordDate, SeasonType season, String memo) {
+        return create(member, null, recordDate, season, memo);
+    }
+
+    public static Record create(Member member, JarPage jarPage, LocalDate recordDate, SeasonType season, String memo) {
         Record record = new Record();
         record.member = Objects.requireNonNull(member, "member");
+        record.jarPage = jarPage;
         record.recordDate = Objects.requireNonNull(recordDate, "recordDate");
         record.season = Objects.requireNonNull(season, "season");
         record.memo = validateMemo(memo);
@@ -78,6 +89,11 @@ public class Record extends BaseTimeEntity {
         this.recordDate = validatedDate;
         this.season = validatedSeason;
         this.memo = validatedMemo;
+    }
+
+    /** 날짜 변경으로 연도·계절 범위가 달라졌을 때 새 단지 페이지로 이동한다. */
+    public void moveToJarPage(JarPage jarPage) {
+        this.jarPage = Objects.requireNonNull(jarPage, "jarPage");
     }
 
     /** 기록 글의 최대 길이를 검증한다. */

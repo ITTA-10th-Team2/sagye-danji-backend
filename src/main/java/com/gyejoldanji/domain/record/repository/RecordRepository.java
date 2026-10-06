@@ -16,9 +16,18 @@ import java.util.Optional;
 /** 기록 저장과 회원 소유권을 포함한 command용 잠금 조회를 제공한다. */
 public interface RecordRepository extends JpaRepository<Record, Long> {
 
-    /** 회원의 전체 기록 수와 가장 오래된 기록일을 단일 집계 쿼리로 조회한다. */
+    long countByJarPageId(Long jarPageId);
+
+    List<Record> findAllByJarPageIdOrderByRecordDateDescIdDesc(Long jarPageId);
+
+    /** 회원의 전체 기록 수·가장 오래된 기록일·계절별 개수를 단일 집계 쿼리로 조회한다. */
     @Query(value = """
-            select count(*) as recordCount, min(record_date) as firstRecordDate
+            select count(*) as recordCount,
+                   min(record_date) as firstRecordDate,
+                   coalesce(sum(case when season = 'SPRING' then 1 else 0 end), 0) as springCount,
+                   coalesce(sum(case when season = 'SUMMER' then 1 else 0 end), 0) as summerCount,
+                   coalesce(sum(case when season = 'AUTUMN' then 1 else 0 end), 0) as autumnCount,
+                   coalesce(sum(case when season = 'WINTER' then 1 else 0 end), 0) as winterCount
             from records
             where member_id = :memberId
             """, nativeQuery = true)
@@ -32,34 +41,6 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     /** 잠금 없이 ID와 회원 ID를 함께 조건화해 상세 조회한다. */
     @Query("select r from Record r where r.id = :recordId and r.member.id = :memberId")
     Optional<Record> findOwnedById(@Param("recordId") Long recordId, @Param("memberId") Long memberId);
-
-    /** 회원의 연도 범위 첫 페이지를 최신 기록부터 조회한다. */
-    @Query("""
-            select r from Record r
-            where r.member.id = :memberId
-              and r.recordDate >= :startDate and r.recordDate < :endDate
-            order by r.recordDate desc, r.id desc
-            """)
-    List<Record> findOwnedInDateRange(@Param("memberId") Long memberId,
-                                      @Param("startDate") LocalDate startDate,
-                                      @Param("endDate") LocalDate endDate,
-                                      Pageable pageable);
-
-    /** 회원의 연도 범위에서 복합 cursor 뒤 기록을 최신순으로 조회한다. */
-    @Query("""
-            select r from Record r
-            where r.member.id = :memberId
-              and r.recordDate >= :startDate and r.recordDate < :endDate
-              and (r.recordDate < :cursorDate
-                   or (r.recordDate = :cursorDate and r.id < :cursorId))
-            order by r.recordDate desc, r.id desc
-            """)
-    List<Record> findOwnedInDateRangeAfter(@Param("memberId") Long memberId,
-                                           @Param("startDate") LocalDate startDate,
-                                           @Param("endDate") LocalDate endDate,
-                                           @Param("cursorDate") LocalDate cursorDate,
-                                           @Param("cursorId") Long cursorId,
-                                           Pageable pageable);
 
     /** 회원의 연도·계절 범위 첫 페이지를 최신 기록부터 조회한다. */
     @Query("""
@@ -96,5 +77,13 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
         long getRecordCount();
 
         LocalDate getFirstRecordDate();
+
+        long getSpringCount();
+
+        long getSummerCount();
+
+        long getAutumnCount();
+
+        long getWinterCount();
     }
 }
