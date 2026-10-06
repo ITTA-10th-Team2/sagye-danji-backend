@@ -1,7 +1,6 @@
 package com.gyejoldanji.domain.record.dto;
 
 import com.gyejoldanji.domain.image.entity.Image;
-import com.gyejoldanji.domain.image.enums.PhotoSource;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.global.common.enums.SeasonType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -11,6 +10,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
 
 /** 기록 상세와 저장 결과에 사용하는 기록·이미지 메타데이터 응답. */
 @Schema(description = "기록 상세 정보")
@@ -19,15 +19,16 @@ public record RecordResponse(
         @Schema(description = "기록 날짜", example = "2026-10-04") LocalDate recordDate,
         @Schema(description = "기록 날짜에서 서버가 계산한 계절", example = "AUTUMN") SeasonType season,
         @Schema(description = "기록 메모", example = "가을밤 산책 🍂", nullable = true) String memo,
-        @Schema(description = "표시 순서대로 정렬된 이미지 메타데이터") List<ImageResponse> images,
+        @Schema(description = "표시 순서대로 정렬된 이미지 메타데이터") List<RecordImageResponse> images,
         @Schema(description = "UTC 기준 생성 시각", example = "2026-10-03T17:10:00Z") String createdAt,
         @Schema(description = "UTC 기준 수정 시각", example = "2026-10-03T17:10:00Z") String updatedAt
 ) {
 
     /** flush를 마친 Entity를 외부 응답으로 변환하고 객체 키는 노출하지 않는다. */
-    public static RecordResponse from(Record record, List<Image> images) {
+    public static RecordResponse from(Record record, List<Image> images, Function<String, String> viewUrlIssuer) {
         return new RecordResponse(record.getId(), record.getRecordDate(), record.getSeason(), record.getMemo(),
-                images.stream().sorted(Comparator.comparingInt(Image::getSortOrder)).map(ImageResponse::from).toList(),
+                images.stream().sorted(Comparator.comparingInt(Image::getSortOrder))
+                        .map(image -> RecordImageResponse.from(image, viewUrlIssuer)).toList(),
                 utc(record.getCreatedAt()), utc(record.getUpdatedAt()));
     }
 
@@ -36,16 +37,4 @@ public record RecordResponse(
         return value == null ? null : value.toInstant(ZoneOffset.UTC).toString();
     }
 
-    /** command 응답에 필요한 이미지 ID와 표시 정보. */
-    @Schema(description = "저장된 이미지 메타데이터")
-    public record ImageResponse(
-            @Schema(description = "이미지 ID. 수정 요청의 EXISTING imageId로 사용", example = "1") Long id,
-            @Schema(description = "이미지 입력 경로", example = "CAMERA") PhotoSource source,
-            @Schema(description = "기록 안의 표시 순서", example = "0") int sortOrder
-    ) {
-        /** Image Entity에서 스토리지 키를 제외한 응답을 만든다. */
-        private static ImageResponse from(Image image) {
-            return new ImageResponse(image.getId(), image.getSource(), image.getSortOrder());
-        }
-    }
 }

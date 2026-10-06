@@ -74,7 +74,7 @@ public class RecordCommandService {
             List<Image> savedImages = imageRepository.saveAll(images);
             imageRepository.flush();
             recordRepository.flush();
-            return RecordResponse.from(record, savedImages);
+            return RecordResponse.from(record, savedImages, imageStorageService::issueViewUrl);
         } catch (DataIntegrityViolationException exception) {
             throw translateIntegrityViolation(exception);
         }
@@ -96,7 +96,7 @@ public class RecordCommandService {
 
         if (request.images() == null) {
             recordRepository.flush();
-            return RecordResponse.from(record, currentImages);
+            return RecordResponse.from(record, currentImages, imageStorageService::issueViewUrl);
         }
 
         validateUpdateImages(request.images());
@@ -148,7 +148,7 @@ public class RecordCommandService {
 
             List<Image> finalImages = new ArrayList<>(retained);
             finalImages.addAll(savedAdded);
-            return RecordResponse.from(record, finalImages);
+            return RecordResponse.from(record, finalImages, imageStorageService::issueViewUrl);
         } catch (DataIntegrityViolationException exception) {
             throw translateIntegrityViolation(exception);
         }
