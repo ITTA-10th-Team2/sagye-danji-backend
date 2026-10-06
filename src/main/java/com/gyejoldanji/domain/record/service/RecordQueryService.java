@@ -2,10 +2,13 @@ package com.gyejoldanji.domain.record.service;
 
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
+import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordListItemResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
+import com.gyejoldanji.domain.record.dto.SeasonRecordCursorPageResponse;
+import com.gyejoldanji.domain.record.dto.SeasonRecordListItemResponse;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.domain.record.repository.RecordRepository;
 import com.gyejoldanji.global.common.enums.SeasonType;
@@ -40,6 +43,7 @@ public class RecordQueryService {
 
     private final RecordRepository recordRepository;
     private final ImageRepository imageRepository;
+    private final ImageStorageService imageStorageService;
     private final RecordCursorCodec cursorCodec;
     private final Clock clock;
 
@@ -71,8 +75,8 @@ public class RecordQueryService {
     }
 
     /** 회원의 특정 연도·계절 기록을 최신순 cursor 페이지로 조회한다. */
-    public RecordCursorPageResponse findBySeason(Long memberId, int year, SeasonType season,
-                                                  String encodedCursor, int size) {
+    public SeasonRecordCursorPageResponse findBySeason(Long memberId, int year, SeasonType season,
+                                                        String encodedCursor, int size) {
         validateMemberId(memberId);
         validateYear(year);
         validatePageSize(size);
@@ -87,7 +91,7 @@ public class RecordQueryService {
                 : recordRepository.findOwnedBySeasonInDateRangeAfter(memberId, season, range.start(),
                         range.endExclusive(), cursor.recordDate(), cursor.recordId(),
                         PageRequest.of(0, size + 1));
-        return toPage(records, size);
+        return toSeasonPage(records, size);
     }
 
     /** ID와 회원 ID를 함께 조건화해 소유한 기록의 상세와 정렬된 이미지를 조회한다. */
@@ -99,11 +103,33 @@ public class RecordQueryService {
         Record record = recordRepository.findOwnedById(recordId, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RECORD_NOT_FOUND));
         List<Image> images = imageRepository.findAllByRecordIdOrderBySortOrderAsc(recordId);
-        return RecordResponse.from(record, images);
+        return RecordResponse.from(record, images, imageStorageService::issueViewUrl);
     }
 
     /** limit+1 조회 결과를 N+1 없는 목록 응답과 다음 cursor로 변환한다. */
     private RecordCursorPageResponse toPage(List<Record> queriedRecords, int limit) {
+        PageSource source = loadPageSource(queriedRecords, limit);
+        List<RecordListItemResponse> items = source.records().stream()
+                .map(record -> RecordListItemResponse.from(record,
+                        source.imagesByRecordId().getOrDefault(record.getId(), List.of()),
+                        imageStorageService::issueViewUrl))
+                .toList();
+        return new RecordCursorPageResponse(items, source.nextCursor(), source.hasNext());
+    }
+
+    /** 계절 단지 목록에 기록별 이미지 미리보기를 최대 두 장 포함한다. */
+    private SeasonRecordCursorPageResponse toSeasonPage(List<Record> queriedRecords, int limit) {
+        PageSource source = loadPageSource(queriedRecords, limit);
+        List<SeasonRecordListItemResponse> items = source.records().stream()
+                .map(record -> SeasonRecordListItemResponse.from(record,
+                        source.imagesByRecordId().getOrDefault(record.getId(), List.of()),
+                        imageStorageService::issueViewUrl))
+                .toList();
+        return new SeasonRecordCursorPageResponse(items, source.nextCursor(), source.hasNext());
+    }
+
+    /** 페이지의 기록과 이미지를 각각 한 번에 조회해 목록 종류가 늘어도 DB N+1을 방지한다. */
+    private PageSource loadPageSource(List<Record> queriedRecords, int limit) {
         boolean hasNext = queriedRecords.size() > limit;
         List<Record> records = hasNext ? queriedRecords.subList(0, limit) : queriedRecords;
         List<Long> recordIds = records.stream().map(Record::getId).toList();
@@ -111,15 +137,10 @@ public class RecordQueryService {
                 ? Collections.emptyMap()
                 : imageRepository.findAllByRecordIds(recordIds).stream()
                         .collect(Collectors.groupingBy(image -> image.getRecord().getId()));
-
-        List<RecordListItemResponse> items = records.stream()
-                .map(record -> RecordListItemResponse.from(record,
-                        imagesByRecordId.getOrDefault(record.getId(), List.of())))
-                .toList();
         String nextCursor = hasNext
                 ? cursorCodec.encode(records.getLast().getRecordDate(), records.getLast().getId())
                 : null;
-        return new RecordCursorPageResponse(items, nextCursor, hasNext);
+        return new PageSource(records, imagesByRecordId, nextCursor, hasNext);
     }
 
     /** 인증 계층에서 전달된 회원 ID가 서비스 내부 호출에서도 유효한지 방어한다. */
@@ -149,5 +170,10 @@ public class RecordQueryService {
             LocalDate start = LocalDate.of(year, 1, 1);
             return new DateRange(start, start.plusYears(1));
         }
+    }
+
+    /** 목록 응답 종류가 공유하는 페이지 절단·이미지 일괄 조회 결과. */
+    private record PageSource(List<Record> records, Map<Long, List<Image>> imagesByRecordId,
+                              String nextCursor, boolean hasNext) {
     }
 }

@@ -105,6 +105,15 @@ public class ImageStorageService {
     }
 
     /**
+     * 비공개 객체를 한 시간 동안 조회할 수 있는 서명 URL을 발급한다.
+     *
+     * @throws BusinessException IMAGE_STORAGE_UNAVAILABLE
+     */
+    public String issueViewUrl(String objectKey) {
+        return imageStorageClient.createViewUrl(objectKey).url();
+    }
+
+    /**
      * 삭제된 이미지의 원본·썸네일 객체를 현재 트랜잭션 커밋 뒤에 삭제하도록 예약한다. 롤백되면 아무것도 지우지 않는다.
      * 저장소 삭제 실패는 API 결과에 영향을 주지 않도록 로그만 남긴다.
      *

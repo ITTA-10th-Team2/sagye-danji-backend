@@ -5,6 +5,7 @@ import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.dto.RecordUpdateRequest;
+import com.gyejoldanji.domain.record.dto.SeasonRecordCursorPageResponse;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
 import com.gyejoldanji.domain.record.service.RecordQueryService;
 import com.gyejoldanji.global.common.response.ApiResponse;
@@ -99,14 +100,14 @@ public class RecordController {
             description = "특정 연도와 계절의 내 기록을 cursor 기반으로 조회합니다. 기본 페이지 크기는 5개입니다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "단지 목록 조회 성공",
-                    content = @Content(schema = @Schema(implementation = RecordCursorPageResponse.class))),
+                    content = @Content(schema = @Schema(implementation = SeasonRecordCursorPageResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "연도·계절·커서 검증 실패",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/seasons/{season}")
-    public ApiResponse<RecordCursorPageResponse> findBySeason(
+    public ApiResponse<SeasonRecordCursorPageResponse> findBySeason(
             @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
             @Parameter(description = "조회할 계절", example = "AUTUMN")
             @PathVariable SeasonType season,
