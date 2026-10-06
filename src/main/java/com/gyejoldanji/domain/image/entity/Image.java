@@ -31,7 +31,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "images", uniqueConstraints = {
         @UniqueConstraint(name = "uk_images_original_key", columnNames = "original_key"),
-        @UniqueConstraint(name = "uk_images_record_order", columnNames = {"record_id", "sort_order"})
+        @UniqueConstraint(name = "uk_images_record", columnNames = "record_id")
 })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -60,7 +60,7 @@ public class Image {
 
     /** 이미지 촬영 또는 선택 경로. */
     @Enumerated(EnumType.STRING)
-    @Column(name = "source", nullable = false)
+    @Column(name = "source")
     private PhotoSource source;
 
     /** 같은 기록 안에서 표시할 순서. */
@@ -84,6 +84,16 @@ public class Image {
             throw new IllegalArgumentException("이미지 표시 순서는 0 이상이어야 합니다.");
         }
         image.sortOrder = sortOrder;
+        return image;
+    }
+
+    /** 단일 이미지 계약에 따라 출처 없이 표시 순서 0인 이미지를 생성한다. */
+    public static Image create(Record record, String originalKey, String thumbnailKey) {
+        Image image = new Image();
+        image.record = Objects.requireNonNull(record, "record");
+        image.originalKey = Objects.requireNonNull(originalKey, "originalKey");
+        image.thumbnailKey = thumbnailKey;
+        image.sortOrder = 0;
         return image;
     }
 

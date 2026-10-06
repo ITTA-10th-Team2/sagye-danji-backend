@@ -3,8 +3,6 @@ package com.gyejoldanji.domain.record.service;
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
 import com.gyejoldanji.domain.image.service.ImageStorageService;
-import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
-import com.gyejoldanji.domain.record.dto.RecordListItemResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
 import com.gyejoldanji.domain.record.dto.SeasonRecordCursorPageResponse;
@@ -24,6 +22,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -51,27 +50,23 @@ public class RecordQueryService {
     public RecordSummaryResponse findSummary(Long memberId) {
         validateMemberId(memberId);
         RecordRepository.RecordSummaryProjection summary = recordRepository.summarizeByMemberId(memberId);
+        Map<SeasonType, Long> seasonCounts = seasonCounts(summary);
         if (summary.getRecordCount() == 0 || summary.getFirstRecordDate() == null) {
-            return new RecordSummaryResponse(0, 0);
+            return new RecordSummaryResponse(0, 0, seasonCounts);
         }
         LocalDate today = LocalDate.now(clock.withZone(SEOUL));
         long recordingDayCount = ChronoUnit.DAYS.between(summary.getFirstRecordDate(), today) + 1;
-        return new RecordSummaryResponse(summary.getRecordCount(), recordingDayCount);
+        return new RecordSummaryResponse(summary.getRecordCount(), recordingDayCount, seasonCounts);
     }
 
-    /** 회원의 특정 연도 전체 기록을 최신순 cursor 페이지로 조회한다. */
-    public RecordCursorPageResponse findAll(Long memberId, int year, String encodedCursor, int size) {
-        validateMemberId(memberId);
-        validateYear(year);
-        validatePageSize(size);
-        DateRange range = DateRange.of(year);
-        RecordCursorCodec.Cursor cursor = cursorCodec.decodeNullable(encodedCursor);
-        List<Record> records = cursor == null
-                ? recordRepository.findOwnedInDateRange(memberId, range.start(), range.endExclusive(),
-                        PageRequest.of(0, size + 1))
-                : recordRepository.findOwnedInDateRangeAfter(memberId, range.start(), range.endExclusive(),
-                        cursor.recordDate(), cursor.recordId(), PageRequest.of(0, size + 1));
-        return toPage(records, size);
+    /** 집계 projection을 네 계절이 항상 존재하는 응답 맵으로 변환한다. */
+    private static Map<SeasonType, Long> seasonCounts(RecordRepository.RecordSummaryProjection summary) {
+        Map<SeasonType, Long> counts = new EnumMap<>(SeasonType.class);
+        counts.put(SeasonType.SPRING, summary.getSpringCount());
+        counts.put(SeasonType.SUMMER, summary.getSummerCount());
+        counts.put(SeasonType.AUTUMN, summary.getAutumnCount());
+        counts.put(SeasonType.WINTER, summary.getWinterCount());
+        return counts;
     }
 
     /** 회원의 특정 연도·계절 기록을 최신순 cursor 페이지로 조회한다. */
@@ -104,17 +99,6 @@ public class RecordQueryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RECORD_NOT_FOUND));
         List<Image> images = imageRepository.findAllByRecordIdOrderBySortOrderAsc(recordId);
         return RecordResponse.from(record, images, imageStorageService::issueViewUrl);
-    }
-
-    /** limit+1 조회 결과를 N+1 없는 목록 응답과 다음 cursor로 변환한다. */
-    private RecordCursorPageResponse toPage(List<Record> queriedRecords, int limit) {
-        PageSource source = loadPageSource(queriedRecords, limit);
-        List<RecordListItemResponse> items = source.records().stream()
-                .map(record -> RecordListItemResponse.from(record,
-                        source.imagesByRecordId().getOrDefault(record.getId(), List.of()),
-                        imageStorageService::issueViewUrl))
-                .toList();
-        return new RecordCursorPageResponse(items, source.nextCursor(), source.hasNext());
     }
 
     /** 계절 단지 목록에 기록별 이미지 미리보기를 최대 두 장 포함한다. */

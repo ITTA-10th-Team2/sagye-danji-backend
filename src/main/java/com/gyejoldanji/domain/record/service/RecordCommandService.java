@@ -4,6 +4,8 @@ import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
 import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
+import com.gyejoldanji.domain.jar.entity.JarPage;
+import com.gyejoldanji.domain.jar.service.JarPageAllocationService;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
@@ -36,7 +38,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class RecordCommandService {
 
-    private static final int MAX_IMAGE_COUNT = 10;
     private static final int MAX_MEMO_CODE_POINTS = 100;
     private static final int MAX_OBJECT_KEY_LENGTH = 512;
     private static final String ORIGINAL_KEY_CONSTRAINT = "uk_images_original_key";
@@ -45,42 +46,41 @@ public class RecordCommandService {
     private final RecordRepository recordRepository;
     private final ImageRepository imageRepository;
     private final MemberRepository memberRepository;
+    private final JarPageAllocationService jarPageAllocationService;
     private final ImageStorageService imageStorageService;
     private final SeasonResolver seasonResolver;
     private final Clock clock;
 
-    /** 인증된 회원의 기록과 1~10개 이미지 메타데이터를 생성한다. */
+    /** 인증된 회원의 기록과 단일 이미지 메타데이터를 생성한다. */
     @Transactional
     public RecordResponse create(Long memberId, RecordCreateRequest request) {
         validateMemberId(memberId);
         validateMemo(request.memo());
-        validateCreateImages(request.images());
-        List<String> objectKeys = request.images().stream().map(RecordCreateRequest.ImageItem::objectKey).toList();
-        rejectAttachedKeys(objectKeys);
+        validateObjectKey(request.objectKey());
+        rejectAttachedKey(request.objectKey());
 
-        imageStorageService.validateUploadedObjects(memberId, objectKeys);
-        Member member = memberRepository.findById(memberId)
+        imageStorageService.validateUploadedObjects(memberId, List.of(request.objectKey()));
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
         LocalDate recordDate = request.recordDate() == null
                 ? LocalDate.now(clock.withZone(SEOUL))
                 : request.recordDate();
 
         try {
+            var season = seasonResolver.resolve(recordDate);
+            JarPage jarPage = jarPageAllocationService.allocate(member, recordDate.getYear(), season);
             Record record = recordRepository.save(Record.create(
-                    member, recordDate, seasonResolver.resolve(recordDate), request.memo()));
-            List<Image> images = request.images().stream()
-                    .map(item -> Image.create(record, item.objectKey(), null, item.source(), item.sortOrder()))
-                    .toList();
-            List<Image> savedImages = imageRepository.saveAll(images);
+                    member, jarPage, recordDate, season, request.memo()));
+            Image image = imageRepository.save(Image.create(record, request.objectKey(), null));
             imageRepository.flush();
             recordRepository.flush();
-            return RecordResponse.from(record, savedImages, imageStorageService::issueViewUrl);
+            return RecordResponse.from(record, image, imageStorageService::issueViewUrl);
         } catch (DataIntegrityViolationException exception) {
             throw translateIntegrityViolation(exception);
         }
     }
 
-    /** 소유한 기록의 날짜·메모와 선택적으로 전달된 최종 이미지 구성을 함께 수정한다. */
+    /** 소유한 기록의 날짜·메모와 선택적으로 전달된 단일 이미지를 함께 수정한다. */
     @Transactional
     public RecordResponse update(Long memberId, Long recordId, RecordUpdateRequest request) {
         validateMemberId(memberId);
@@ -92,63 +92,36 @@ public class RecordCommandService {
 
         Record record = ownedRecordForUpdate(recordId, memberId);
         List<Image> currentImages = imageRepository.findAllByRecordIdForUpdate(recordId);
-        record.update(request.recordDate(), seasonResolver.resolve(request.recordDate()), request.memo());
+        var nextSeason = seasonResolver.resolve(request.recordDate());
+        boolean pageScopeChanged = record.getRecordDate().getYear() != request.recordDate().getYear()
+                || record.getSeason() != nextSeason;
+        record.update(request.recordDate(), nextSeason, request.memo());
+        if (pageScopeChanged) {
+            Member member = memberRepository.findByIdForUpdate(memberId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
+            record.moveToJarPage(jarPageAllocationService.allocate(
+                    member, request.recordDate().getYear(), nextSeason));
+        }
 
-        if (request.images() == null) {
+        ensureExactlyOneImage(currentImages);
+        if (!StringUtils.hasText(request.objectKey())) {
             recordRepository.flush();
             return RecordResponse.from(record, currentImages, imageStorageService::issueViewUrl);
         }
 
-        validateUpdateImages(request.images());
-        Map<Long, Image> currentById = new HashMap<>();
-        currentImages.forEach(image -> currentById.put(image.getId(), image));
-
-        Set<Long> retainedIds = new HashSet<>();
-        List<Image> retained = new ArrayList<>();
-        List<RecordUpdateRequest.ImageItem> newItems = new ArrayList<>();
-        for (RecordUpdateRequest.ImageItem item : request.images()) {
-            if (item.type() == RecordUpdateRequest.Type.EXISTING) {
-                Image image = currentById.get(item.imageId());
-                if (image == null || !retainedIds.add(item.imageId())) {
-                    throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
-                }
-                retained.add(image);
-            } else {
-                newItems.add(item);
-            }
-        }
-
-        List<String> newKeys = newItems.stream().map(RecordUpdateRequest.ImageItem::objectKey).toList();
-        rejectAttachedKeys(newKeys);
-        imageStorageService.validateUploadedObjects(memberId, newKeys);
+        validateObjectKey(request.objectKey());
+        rejectAttachedKey(request.objectKey());
+        imageStorageService.validateUploadedObjects(memberId, List.of(request.objectKey()));
 
         try {
-            moveToTemporaryOrders(retained, currentImages);
+            Image removed = currentImages.getFirst();
+            imageRepository.delete(removed);
             imageRepository.flush();
-
-            List<Image> removed = currentImages.stream()
-                    .filter(image -> !retainedIds.contains(image.getId()))
-                    .toList();
-            imageRepository.deleteAll(removed);
-            imageRepository.flush();
-            imageStorageService.scheduleDeletionAfterCommit(removed);
-
-            Map<Long, Integer> finalExistingOrders = new HashMap<>();
-            request.images().stream()
-                    .filter(item -> item.type() == RecordUpdateRequest.Type.EXISTING)
-                    .forEach(item -> finalExistingOrders.put(item.imageId(), item.sortOrder()));
-            retained.forEach(image -> image.changeSortOrder(finalExistingOrders.get(image.getId())));
-
-            List<Image> added = newItems.stream()
-                    .map(item -> Image.create(record, item.objectKey(), null, item.source(), item.sortOrder()))
-                    .toList();
-            List<Image> savedAdded = imageRepository.saveAll(added);
+            Image added = imageRepository.save(Image.create(record, request.objectKey(), null));
             imageRepository.flush();
             recordRepository.flush();
-
-            List<Image> finalImages = new ArrayList<>(retained);
-            finalImages.addAll(savedAdded);
-            return RecordResponse.from(record, finalImages, imageStorageService::issueViewUrl);
+            imageStorageService.scheduleDeletionAfterCommit(List.of(removed));
+            return RecordResponse.from(record, added, imageStorageService::issueViewUrl);
         } catch (DataIntegrityViolationException exception) {
             throw translateIntegrityViolation(exception);
         }
@@ -174,80 +147,10 @@ public class RecordCommandService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RECORD_NOT_FOUND));
     }
 
-    /** create 이미지 개수·키·순서와 요청 내 중복을 검증한다. */
-    private void validateCreateImages(List<RecordCreateRequest.ImageItem> images) {
-        validateImageCount(images);
-        rejectNullImageItems(images);
-        validateOrders(images.stream().map(RecordCreateRequest.ImageItem::sortOrder).toList(), images.size());
-        Set<String> keys = new HashSet<>();
-        for (RecordCreateRequest.ImageItem image : images) {
-            validateObjectKey(image.objectKey());
-            if (image.source() == null || !keys.add(image.objectKey())) {
-                throw new BusinessException(image.source() == null
-                        ? ErrorCode.INVALID_INPUT
-                        : ErrorCode.IMAGE_ALREADY_ATTACHED);
-            }
-        }
-    }
-
-    /** update 이미지의 타입별 필드 조합, 개수, 순서와 요청 내 중복을 검증한다. */
-    private void validateUpdateImages(List<RecordUpdateRequest.ImageItem> images) {
-        validateImageCount(images);
-        rejectNullImageItems(images);
-        validateOrders(images.stream().map(RecordUpdateRequest.ImageItem::sortOrder).toList(), images.size());
-        Set<Long> imageIds = new HashSet<>();
-        Set<String> objectKeys = new HashSet<>();
-        for (RecordUpdateRequest.ImageItem item : images) {
-            if (item.type() == null) {
-                throw new BusinessException(ErrorCode.INVALID_INPUT);
-            }
-            if (item.type() == RecordUpdateRequest.Type.EXISTING) {
-                if (item.imageId() == null || item.imageId() <= 0 || item.objectKey() != null || item.source() != null
-                        || !imageIds.add(item.imageId())) {
-                    throw new BusinessException(ErrorCode.INVALID_INPUT);
-                }
-                continue;
-            }
-            validateObjectKey(item.objectKey());
-            if (item.imageId() != null || item.source() == null) {
-                throw new BusinessException(ErrorCode.INVALID_INPUT);
-            }
-            if (!objectKeys.add(item.objectKey())) {
-                throw new BusinessException(ErrorCode.IMAGE_ALREADY_ATTACHED);
-            }
-        }
-    }
-
-    /** final sortOrder가 정확히 0부터 n-1까지 한 번씩 존재하는지 검증한다. */
-    private void validateOrders(List<Integer> orders, int size) {
-        if (orders.stream().anyMatch(order -> order == null || order < 0)) {
-            throw new BusinessException(ErrorCode.RECORD_IMAGE_ORDER_INVALID);
-        }
-        Set<Integer> unique = new HashSet<>(orders);
-        if (unique.size() != size) {
-            throw new BusinessException(ErrorCode.RECORD_IMAGE_ORDER_INVALID);
-        }
-        for (int order = 0; order < size; order++) {
-            if (!unique.contains(order)) {
-                throw new BusinessException(ErrorCode.RECORD_IMAGE_ORDER_INVALID);
-            }
-        }
-    }
-
-    /** 최종 이미지 수가 1~10개인지 검증한다. */
-    private void validateImageCount(List<?> images) {
-        if (images == null || images.isEmpty()) {
-            throw new BusinessException(ErrorCode.RECORD_IMAGE_REQUIRED);
-        }
-        if (images.size() > MAX_IMAGE_COUNT) {
-            throw new BusinessException(ErrorCode.RECORD_IMAGE_LIMIT_EXCEEDED);
-        }
-    }
-
-    /** 목록 원소가 null이면 service 직접 호출에서도 NullPointerException 대신 입력 오류로 변환한다. */
-    private void rejectNullImageItems(List<?> images) {
-        if (images.stream().anyMatch(Objects::isNull)) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
+    /** 기존 데이터도 단일 이미지 불변식을 만족하는지 검증한다. */
+    private void ensureExactlyOneImage(List<Image> images) {
+        if (images.size() != 1) {
+            throw new BusinessException(ErrorCode.RECORD_IMAGE_INTEGRITY_VIOLATION);
         }
     }
 
@@ -266,22 +169,9 @@ public class RecordCommandService {
     }
 
     /** 이미 어느 기록에 연결된 객체 키가 있으면 신규 연결을 거부한다. */
-    private void rejectAttachedKeys(List<String> objectKeys) {
-        if (!objectKeys.isEmpty() && imageRepository.existsByOriginalKeyIn(objectKeys)) {
+    private void rejectAttachedKey(String objectKey) {
+        if (imageRepository.existsByOriginalKeyIn(List.of(objectKey))) {
             throw new BusinessException(ErrorCode.IMAGE_ALREADY_ATTACHED);
-        }
-    }
-
-    /** 기존 순서와 충돌하지 않는 동적 임시 범위로 유지 이미지들을 이동한다. */
-    private void moveToTemporaryOrders(List<Image> retained, List<Image> currentImages) {
-        int maxOrder = currentImages.stream().map(Image::getSortOrder).max(Comparator.naturalOrder()).orElse(-1);
-        long lastTemporary = (long) maxOrder + retained.size();
-        if (lastTemporary > Integer.MAX_VALUE) {
-            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-        }
-        int temporary = maxOrder + 1;
-        for (Image image : retained) {
-            image.changeSortOrder(temporary++);
         }
     }
 

@@ -3,10 +3,11 @@ package com.gyejoldanji.domain.record.dto;
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.global.common.enums.SeasonType;
+import com.gyejoldanji.global.common.exception.BusinessException;
+import com.gyejoldanji.global.common.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
 
@@ -17,19 +18,17 @@ public record RecordListItemResponse(
         @Schema(description = "기록 날짜", example = "2026-10-04") LocalDate recordDate,
         @Schema(description = "기록 계절", example = "AUTUMN") SeasonType season,
         @Schema(description = "기록 메모", example = "가을밤 산책 🍂", nullable = true) String memo,
-        @Schema(description = "표시 순서가 가장 앞선 대표 이미지", nullable = true) RecordImageResponse coverImage,
-        @Schema(description = "기록에 연결된 이미지 수", example = "2") int imageCount
+        @Schema(description = "기록의 단일 이미지") RecordImageResponse image
 ) {
 
     /** Record와 한 번에 조회한 이미지 목록으로 화면용 요약을 만든다. */
     public static RecordListItemResponse from(Record record, List<Image> images,
                                                Function<String, String> viewUrlIssuer) {
-        RecordImageResponse coverImage = images.stream()
-                .min(Comparator.comparingInt(Image::getSortOrder))
-                .map(image -> RecordImageResponse.from(image, viewUrlIssuer))
-                .orElse(null);
+        if (images.size() != 1) {
+            throw new BusinessException(ErrorCode.RECORD_IMAGE_INTEGRITY_VIOLATION);
+        }
         return new RecordListItemResponse(record.getId(), record.getRecordDate(), record.getSeason(),
-                record.getMemo(), coverImage, images.size());
+                record.getMemo(), RecordImageResponse.from(images.getFirst(), viewUrlIssuer));
     }
 
 }

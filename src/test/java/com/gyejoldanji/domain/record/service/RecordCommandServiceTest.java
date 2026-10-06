@@ -6,6 +6,8 @@ import com.gyejoldanji.domain.image.repository.ImageRepository;
 import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
+import com.gyejoldanji.domain.jar.service.JarPageAllocationService;
+import com.gyejoldanji.domain.jar.entity.JarPage;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
 import com.gyejoldanji.domain.record.dto.RecordImageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
@@ -51,6 +53,10 @@ class RecordCommandServiceTest {
     @Mock
     private MemberRepository memberRepository;
     @Mock
+    private JarPageAllocationService jarPageAllocationService;
+    @Mock
+    private JarPage jarPage;
+    @Mock
     private ImageStorageService imageStorageService;
 
     private RecordCommandService service;
@@ -59,43 +65,39 @@ class RecordCommandServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-10-03T16:30:00Z"), ZoneOffset.UTC);
         service = new RecordCommandService(
-                recordRepository, imageRepository, memberRepository, imageStorageService, new SeasonResolver(), clock);
+                recordRepository, imageRepository, memberRepository, jarPageAllocationService,
+                imageStorageService, new SeasonResolver(), clock);
     }
 
     @Test
     void createsRecordWithKoreanDefaultDateAndServerSeason() {
         Member member = member(42L);
-        when(memberRepository.findById(42L)).thenReturn(Optional.of(member));
+        when(memberRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(member));
         when(imageRepository.existsByOriginalKeyIn(any())).thenReturn(false);
         when(recordRepository.save(any())).thenAnswer(invocation -> {
             Record record = invocation.getArgument(0);
             ReflectionTestUtils.setField(record, "id", 101L);
             return record;
         });
-        when(imageRepository.saveAll(anyList())).thenAnswer(invocation -> {
-            List<Image> images = invocation.getArgument(0);
-            for (int i = 0; i < images.size(); i++) {
-                ReflectionTestUtils.setField(images.get(i), "id", 501L + i);
-            }
-            return images;
+        when(imageRepository.save(any())).thenAnswer(invocation -> {
+            Image image = invocation.getArgument(0);
+            ReflectionTestUtils.setField(image, "id", 501L);
+            return image;
         });
         when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
                 "https://storage.example/" + invocation.<String>getArgument(0));
-        RecordCreateRequest request = new RecordCreateRequest(null, "가을밤 🍂", List.of(
-                new RecordCreateRequest.ImageItem("record-images/42/a.jpg", PhotoSource.CAMERA, 0),
-                new RecordCreateRequest.ImageItem("record-images/42/b.webp", PhotoSource.GALLERY, 1)));
+        RecordCreateRequest request = new RecordCreateRequest(null, "가을밤 🍂", "record-images/42/a.jpg");
 
         RecordResponse response = service.create(42L, request);
 
         assertThat(response.id()).isEqualTo(101L);
         assertThat(response.recordDate()).isEqualTo(LocalDate.of(2026, 10, 4));
         assertThat(response.season()).isEqualTo(SeasonType.AUTUMN);
-        assertThat(response.images()).extracting(RecordImageResponse::sortOrder).containsExactly(0, 1);
-        assertThat(response.images().getFirst().originalUrl())
+        assertThat(response.image().id()).isEqualTo(501L);
+        assertThat(response.image().originalUrl())
                 .isEqualTo("https://storage.example/record-images/42/a.jpg");
-        assertThat(response.images().getFirst().thumbnailUrl()).isEqualTo(response.images().getFirst().originalUrl());
-        verify(imageStorageService).validateUploadedObjects(42L,
-                List.of("record-images/42/a.jpg", "record-images/42/b.webp"));
+        assertThat(response.image().thumbnailUrl()).isEqualTo(response.image().originalUrl());
+        verify(imageStorageService).validateUploadedObjects(42L, List.of("record-images/42/a.jpg"));
         verify(imageRepository).flush();
         verify(recordRepository).flush();
     }
@@ -105,8 +107,8 @@ class RecordCommandServiceTest {
         when(imageRepository.existsByOriginalKeyIn(any())).thenReturn(false);
         doThrow(new BusinessException(ErrorCode.IMAGE_OWNERSHIP_MISMATCH))
                 .when(imageStorageService).validateUploadedObjects(42L, List.of("record-images/43/a.jpg"));
-        RecordCreateRequest request = new RecordCreateRequest(LocalDate.of(2026, 10, 4), null, List.of(
-                new RecordCreateRequest.ImageItem("record-images/43/a.jpg", PhotoSource.CAMERA, 0)));
+        RecordCreateRequest request = new RecordCreateRequest(
+                LocalDate.of(2026, 10, 4), null, "record-images/43/a.jpg");
 
         assertThatThrownBy(() -> service.create(42L, request))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -114,23 +116,20 @@ class RecordCommandServiceTest {
                                 .isEqualTo(ErrorCode.IMAGE_OWNERSHIP_MISMATCH));
 
         verifyNoInteractions(memberRepository, recordRepository);
-        verify(imageRepository, never()).saveAll(anyList());
+        verify(imageRepository, never()).save(any());
     }
 
     @Test
-    void validatesOnlyNewKeysAndSchedulesRemovedImageDeletionOnUpdate() {
+    void validatesReplacementKeyAndSchedulesOldImageDeletionOnUpdate() {
         Member member = member(42L);
         Record record = record(member, 100L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN);
-        Image kept = image(record, 501L, "record-images/42/a.jpg", 0);
-        Image removed = image(record, 502L, "record-images/42/b.jpg", 1);
+        Image removed = image(record, 501L, "record-images/42/a.jpg", 0);
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
-        when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(kept, removed));
+        when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(removed));
         when(imageRepository.existsByOriginalKeyIn(any())).thenReturn(false);
-        when(imageRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
-        RecordUpdateRequest request = new RecordUpdateRequest(LocalDate.of(2026, 10, 4), null, List.of(
-                new RecordUpdateRequest.ImageItem(RecordUpdateRequest.Type.EXISTING, 501L, null, null, 0),
-                new RecordUpdateRequest.ImageItem(RecordUpdateRequest.Type.NEW, null, "record-images/42/c.jpg",
-                        PhotoSource.GALLERY, 1)));
+        when(imageRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        RecordUpdateRequest request = new RecordUpdateRequest(
+                LocalDate.of(2026, 10, 4), null, "record-images/42/c.jpg");
 
         service.update(42L, 100L, request);
 
@@ -139,24 +138,21 @@ class RecordCommandServiceTest {
     }
 
     @Test
-    void rejectsGappedOrdersBeforeDatabaseWrites() {
-        RecordCreateRequest request = new RecordCreateRequest(LocalDate.of(2026, 10, 4), null, List.of(
-                new RecordCreateRequest.ImageItem("record-images/42/a.jpg", PhotoSource.CAMERA, 0),
-                new RecordCreateRequest.ImageItem("record-images/42/b.jpg", PhotoSource.CAMERA, 2)));
+    void rejectsBlankObjectKeyBeforeDatabaseWrites() {
+        RecordCreateRequest request = new RecordCreateRequest(LocalDate.of(2026, 10, 4), null, " ");
 
         assertThatThrownBy(() -> service.create(42L, request))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
-                                .isEqualTo(ErrorCode.RECORD_IMAGE_ORDER_INVALID));
+                                .isEqualTo(ErrorCode.INVALID_INPUT));
 
         verifyNoInteractions(memberRepository, recordRepository);
-        verify(imageRepository, never()).saveAll(anyList());
+        verify(imageRepository, never()).save(any());
     }
 
     @Test
-    void rejectsNullImageItemAsInvalidInput() {
-        RecordCreateRequest request = new RecordCreateRequest(
-                LocalDate.of(2026, 10, 4), null, Arrays.asList((RecordCreateRequest.ImageItem) null));
+    void rejectsNullObjectKeyAsInvalidInput() {
+        RecordCreateRequest request = new RecordCreateRequest(LocalDate.of(2026, 10, 4), null, null);
 
         assertThatThrownBy(() -> service.create(42L, request))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -184,33 +180,32 @@ class RecordCommandServiceTest {
         Image image = image(record, 501L, "record-images/42/a.jpg", 0);
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(image));
+        when(memberRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(member));
+        when(jarPageAllocationService.allocate(member, 2026, SeasonType.WINTER)).thenReturn(jarPage);
 
         RecordResponse response = service.update(42L, 100L,
                 new RecordUpdateRequest(LocalDate.of(2026, 12, 1), "겨울", null));
 
         assertThat(response.season()).isEqualTo(SeasonType.WINTER);
-        assertThat(response.images()).extracting(RecordImageResponse::id).containsExactly(501L);
+        assertThat(response.image().id()).isEqualTo(501L);
         verify(imageRepository, never()).deleteAll(anyList());
         verify(recordRepository).flush();
     }
 
     @Test
-    void swapsExistingImageOrdersThroughTemporaryRange() {
+    void rejectsLegacyRecordWithMultipleImages() {
         Member member = member(42L);
         Record record = record(member, 100L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN);
         Image first = image(record, 501L, "record-images/42/a.jpg", 0);
         Image second = image(record, 502L, "record-images/42/b.jpg", 1);
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(first, second));
-        RecordUpdateRequest request = new RecordUpdateRequest(LocalDate.of(2026, 10, 4), null, List.of(
-                new RecordUpdateRequest.ImageItem(RecordUpdateRequest.Type.EXISTING, 501L, null, null, 1),
-                new RecordUpdateRequest.ImageItem(RecordUpdateRequest.Type.EXISTING, 502L, null, null, 0)));
+        RecordUpdateRequest request = new RecordUpdateRequest(LocalDate.of(2026, 10, 4), null, null);
 
-        RecordResponse response = service.update(42L, 100L, request);
-
-        assertThat(response.images()).extracting(RecordImageResponse::id).containsExactly(502L, 501L);
-        assertThat(first.getSortOrder()).isOne();
-        assertThat(second.getSortOrder()).isZero();
+        assertThatThrownBy(() -> service.update(42L, 100L, request))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.RECORD_IMAGE_INTEGRITY_VIOLATION));
     }
 
     @Test
