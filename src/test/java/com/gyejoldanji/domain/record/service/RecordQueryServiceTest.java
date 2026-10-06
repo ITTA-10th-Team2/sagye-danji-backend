@@ -3,10 +3,13 @@ package com.gyejoldanji.domain.record.service;
 import com.gyejoldanji.domain.image.entity.Image;
 import com.gyejoldanji.domain.image.enums.PhotoSource;
 import com.gyejoldanji.domain.image.repository.ImageRepository;
+import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.record.dto.RecordCursorPageResponse;
+import com.gyejoldanji.domain.record.dto.RecordImageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
+import com.gyejoldanji.domain.record.dto.SeasonRecordCursorPageResponse;
 import com.gyejoldanji.domain.record.entity.Record;
 import com.gyejoldanji.domain.record.repository.RecordRepository;
 import com.gyejoldanji.global.common.enums.SeasonType;
@@ -45,6 +48,8 @@ class RecordQueryServiceTest {
     private RecordRepository recordRepository;
     @Mock
     private ImageRepository imageRepository;
+    @Mock
+    private ImageStorageService imageStorageService;
     @Mock
     private RecordCursorCodec cursorCodec;
     @Mock
@@ -94,6 +99,8 @@ class RecordQueryServiceTest {
         when(imageRepository.findAllByRecordIds(List.of(103L, 102L)))
                 .thenReturn(List.of(image(501L, newest, 0), image(502L, newest, 1),
                         image(503L, lastIncluded, 0)));
+        when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
+                "https://storage.example/" + invocation.<String>getArgument(0));
         when(cursorCodec.encode(lastIncluded.getRecordDate(), lastIncluded.getId())).thenReturn("next");
 
         RecordCursorPageResponse response = service.findAll(42L, 2026, null, 2);
@@ -101,6 +108,10 @@ class RecordQueryServiceTest {
         assertThat(response.items()).extracting(item -> item.id()).containsExactly(103L, 102L);
         assertThat(response.items().getFirst().imageCount()).isEqualTo(2);
         assertThat(response.items().getFirst().coverImage().id()).isEqualTo(501L);
+        assertThat(response.items().getFirst().coverImage().originalUrl())
+                .isEqualTo("https://storage.example/record-images/501.jpg");
+        assertThat(response.items().getFirst().coverImage().thumbnailUrl())
+                .isEqualTo(response.items().getFirst().coverImage().originalUrl());
         assertThat(response.hasNext()).isTrue();
         assertThat(response.nextCursor()).isEqualTo("next");
 
@@ -119,7 +130,8 @@ class RecordQueryServiceTest {
                 eq(cursor.recordDate()), eq(cursor.recordId()), any(Pageable.class)))
                 .thenReturn(List.of());
 
-        RecordCursorPageResponse response = service.findBySeason(42L, 2026, SeasonType.AUTUMN, "cursor", 7);
+        SeasonRecordCursorPageResponse response = service.findBySeason(
+                42L, 2026, SeasonType.AUTUMN, "cursor", 7);
 
         assertThat(response.items()).isEmpty();
         assertThat(response.hasNext()).isFalse();
@@ -129,6 +141,34 @@ class RecordQueryServiceTest {
                 any(), any(), pageable.capture());
         assertThat(pageable.getValue().getPageSize()).isEqualTo(8);
         verifyNoInteractions(imageRepository);
+    }
+
+    @Test
+    void seasonPageIncludesAtMostTwoPreviewImagesWithoutAdditionalRecordQueries() {
+        Record record = record(101L, LocalDate.of(2026, 10, 4));
+        when(recordRepository.findOwnedBySeasonInDateRange(eq(42L), eq(SeasonType.AUTUMN),
+                eq(LocalDate.of(2026, 1, 1)), eq(LocalDate.of(2027, 1, 1)), any(Pageable.class)))
+                .thenReturn(List.of(record));
+        when(imageRepository.findAllByRecordIds(List.of(101L))).thenReturn(List.of(
+                image(503L, record, 2),
+                image(501L, record, 0, "record-images/501-thumb.jpg"),
+                image(502L, record, 1)));
+        when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
+                "https://storage.example/" + invocation.<String>getArgument(0));
+
+        SeasonRecordCursorPageResponse response = service.findBySeason(
+                42L, 2026, SeasonType.AUTUMN, null, 5);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().previewImages())
+                .extracting(preview -> preview.id())
+                .containsExactly(501L, 502L);
+        assertThat(response.items().getFirst().imageCount()).isEqualTo(3);
+        assertThat(response.items().getFirst().previewImages().getFirst().thumbnailUrl())
+                .isEqualTo("https://storage.example/record-images/501-thumb.jpg");
+        assertThat(response.items().getFirst().previewImages().get(1).thumbnailUrl())
+                .isEqualTo(response.items().getFirst().previewImages().get(1).originalUrl());
+        verify(imageRepository).findAllByRecordIds(List.of(101L));
     }
 
     @Test
@@ -145,11 +185,19 @@ class RecordQueryServiceTest {
         Record record = record(101L, LocalDate.of(2026, 10, 4));
         when(recordRepository.findOwnedById(101L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdOrderBySortOrderAsc(101L))
-                .thenReturn(List.of(image(502L, record, 0), image(501L, record, 1)));
+                .thenReturn(List.of(image(502L, record, 0, "record-images/502-thumb.jpg"),
+                        image(501L, record, 1)));
+        when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
+                "https://storage.example/" + invocation.<String>getArgument(0));
 
         RecordResponse response = service.findDetail(42L, 101L);
 
-        assertThat(response.images()).extracting(RecordResponse.ImageResponse::id).containsExactly(502L, 501L);
+        assertThat(response.images()).extracting(RecordImageResponse::id).containsExactly(502L, 501L);
+        assertThat(response.images().getFirst().originalUrl())
+                .isEqualTo("https://storage.example/record-images/502.jpg");
+        assertThat(response.images().getFirst().thumbnailUrl())
+                .isEqualTo("https://storage.example/record-images/502-thumb.jpg");
+        assertThat(response.images().get(1).thumbnailUrl()).isEqualTo(response.images().get(1).originalUrl());
         verify(imageRepository).findAllByRecordIdOrderBySortOrderAsc(101L);
     }
 
@@ -173,7 +221,12 @@ class RecordQueryServiceTest {
     }
 
     private static Image image(Long id, Record record, int order) {
-        Image image = Image.create(record, "record-images/" + id + ".jpg", null, PhotoSource.CAMERA, order);
+        return image(id, record, order, null);
+    }
+
+    private static Image image(Long id, Record record, int order, String thumbnailKey) {
+        Image image = Image.create(record, "record-images/" + id + ".jpg", thumbnailKey,
+                PhotoSource.CAMERA, order);
         ReflectionTestUtils.setField(image, "id", id);
         return image;
     }

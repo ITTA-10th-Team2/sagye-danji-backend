@@ -7,6 +7,7 @@ import com.gyejoldanji.domain.image.service.ImageStorageService;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
+import com.gyejoldanji.domain.record.dto.RecordImageResponse;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordUpdateRequest;
 import com.gyejoldanji.domain.record.entity.Record;
@@ -78,6 +79,8 @@ class RecordCommandServiceTest {
             }
             return images;
         });
+        when(imageStorageService.issueViewUrl(any())).thenAnswer(invocation ->
+                "https://storage.example/" + invocation.<String>getArgument(0));
         RecordCreateRequest request = new RecordCreateRequest(null, "가을밤 🍂", List.of(
                 new RecordCreateRequest.ImageItem("record-images/42/a.jpg", PhotoSource.CAMERA, 0),
                 new RecordCreateRequest.ImageItem("record-images/42/b.webp", PhotoSource.GALLERY, 1)));
@@ -87,7 +90,10 @@ class RecordCommandServiceTest {
         assertThat(response.id()).isEqualTo(101L);
         assertThat(response.recordDate()).isEqualTo(LocalDate.of(2026, 10, 4));
         assertThat(response.season()).isEqualTo(SeasonType.AUTUMN);
-        assertThat(response.images()).extracting(RecordResponse.ImageResponse::sortOrder).containsExactly(0, 1);
+        assertThat(response.images()).extracting(RecordImageResponse::sortOrder).containsExactly(0, 1);
+        assertThat(response.images().getFirst().originalUrl())
+                .isEqualTo("https://storage.example/record-images/42/a.jpg");
+        assertThat(response.images().getFirst().thumbnailUrl()).isEqualTo(response.images().getFirst().originalUrl());
         verify(imageStorageService).validateUploadedObjects(42L,
                 List.of("record-images/42/a.jpg", "record-images/42/b.webp"));
         verify(imageRepository).flush();
@@ -183,7 +189,7 @@ class RecordCommandServiceTest {
                 new RecordUpdateRequest(LocalDate.of(2026, 12, 1), "겨울", null));
 
         assertThat(response.season()).isEqualTo(SeasonType.WINTER);
-        assertThat(response.images()).extracting(RecordResponse.ImageResponse::id).containsExactly(501L);
+        assertThat(response.images()).extracting(RecordImageResponse::id).containsExactly(501L);
         verify(imageRepository, never()).deleteAll(anyList());
         verify(recordRepository).flush();
     }
@@ -202,7 +208,7 @@ class RecordCommandServiceTest {
 
         RecordResponse response = service.update(42L, 100L, request);
 
-        assertThat(response.images()).extracting(RecordResponse.ImageResponse::id).containsExactly(502L, 501L);
+        assertThat(response.images()).extracting(RecordImageResponse::id).containsExactly(502L, 501L);
         assertThat(first.getSortOrder()).isOne();
         assertThat(second.getSortOrder()).isZero();
     }

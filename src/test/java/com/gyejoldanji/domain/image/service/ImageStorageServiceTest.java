@@ -127,6 +127,16 @@ class ImageStorageServiceTest {
     }
 
     @Test
+    void issuesOneHourViewUrl() {
+        String url = service.issueViewUrl("record-images/42/2026/10/a.jpg");
+
+        assertThat(url)
+                .startsWith("https://fake-image-storage.local/")
+                .contains("record-images%2F42%2F2026%2F10%2Fa.jpg")
+                .endsWith("?method=GET");
+    }
+
+    @Test
     void rejectsUploadUrlForUnsupportedTypeOrSize() {
         expectError(() -> service.issueUploadUrl(42L, new ImagePresignedUrlRequest("image/webp", 1L)),
                 ErrorCode.IMAGE_INVALID_FORMAT);
