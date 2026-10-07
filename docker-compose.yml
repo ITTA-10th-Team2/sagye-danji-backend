@@ -35,7 +35,7 @@ services:
     logging: *default-logging
     env_file: .env
     environment:
-      DB_URL: jdbc:mysql://mysql:3306/gyejol_danji?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_URL: ${DB_URL:-jdbc:mysql://mysql:3306/gyejol_danji?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
       TZ: Asia/Seoul
       GOOGLE_SHEETS_ENABLED: ${GOOGLE_SHEETS_ENABLED:-false}
       GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-}
