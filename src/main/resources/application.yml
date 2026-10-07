@@ -107,3 +107,12 @@ springdoc:
 logging:
   level:
     org.hibernate.orm.jdbc.error: "off"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

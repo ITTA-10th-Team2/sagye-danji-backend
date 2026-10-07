@@ -61,4 +61,14 @@ jobs:
             cd /home/ec2-user/app
             docker compose pull app
             docker compose up -d
+            docker compose restart nginx
+            for i in $(seq 1 30); do
+              if curl -sfk https://localhost/actuator/health -o /dev/null; then
+                echo "health check OK"; break
+              fi
+              if [ "$i" = 30 ]; then
+                echo "health check FAILED"; docker compose logs --tail=100 app; exit 1
+              fi
+              sleep 5
+            done
             docker image prune -f
