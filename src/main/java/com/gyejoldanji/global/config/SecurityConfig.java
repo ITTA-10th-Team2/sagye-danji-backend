@@ -39,7 +39,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>인증 정보는 Authorization 헤더·요청 본문으로만 받고 자동 전송 쿠키를 쓰지 않으므로 CSRF를 끈다. 세션·Basic·formLogin·기본
  * logout은 쓰지 않는다. Swagger 문서 경로는 환경과 무관하게 GET으로 공개하며, 실제 노출 여부는 {@code app.swagger.enabled}로
  * springdoc 자체를 켜고 끈다({@code SWAGGER_ENABLED} env, 기본 true). 테스트 API는 {@code toss.identity-environment=DEV}에서만
- * GET으로 공개하고 PROD에서는 거부한다. actuator(health)는 의존성이 없어 경로가 없다.
+ * GET으로 공개하고 PROD에서는 거부한다. actuator health는 헬스체크용으로 공개하며 상세 정보는 노출하지 않는다.
  */
 @Configuration
 @EnableWebSecurity
@@ -115,6 +115,7 @@ public class SecurityConfig {
                     // 환경과 무관하게 경로는 열어 두고, 실제 응답 여부는 app.swagger.enabled로 springdoc 자체를 켜고 끈다.
                     auth.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
                             .permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/actuator/health").permitAll();
                     if (dev) {
                         auth.requestMatchers(HttpMethod.GET, "/api/test/response").permitAll();
                     }
