@@ -135,8 +135,8 @@ public class SecurityConfig {
     }
 
     /**
-     * 설정한 실제 Origin만 허용한다. Authorization·Content-Type, GET·POST·PATCH·DELETE·OPTIONS, credentials 없음,
-     * Retry-After 노출.
+     * 설정한 실제 Origin만 허용한다. Authorization·Content-Type과 분석용 공통 헤더, GET·POST·PUT·PATCH·DELETE·OPTIONS,
+     * credentials 없음, Retry-After 노출.
      *
      * @throws IllegalStateException PROD에서 https가 아니거나 localhost·loopback Origin이 있을 때(기동 실패)
      */
@@ -152,7 +152,12 @@ public class SecurityConfig {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(origins);
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE));
+        cors.setAllowedHeaders(List.of(
+                HttpHeaders.AUTHORIZATION,
+                HttpHeaders.CONTENT_TYPE,
+                "X-Analytics-Session-Id",
+                "X-Client-Version",
+                "X-Client-OS"));
         cors.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         cors.setAllowCredentials(false);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
