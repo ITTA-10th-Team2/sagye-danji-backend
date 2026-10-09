@@ -45,6 +45,31 @@ class JarStickerServiceTest {
     }
 
     @Test
+    void acceptsNonContiguousZIndexesInSortedOrder() {
+        JarPage page = page();
+        when(pageRepository.findByIdAndMemberId(31L, 42L)).thenReturn(Optional.of(page));
+        when(pageRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        JarStickerRequest request = new JarStickerRequest(List.of(
+                item(StickerType.CLOVER, 9), item(StickerType.CAMERA, 1)));
+
+        JarStickerResponse response = service.replace(42L, 31L, request);
+
+        assertThat(response.items()).extracting(JarStickerResponse.Item::zIndex).containsExactly(1, 9);
+    }
+
+    @Test
+    void acceptsSingleStickerWithNonZeroZIndex() {
+        JarPage page = page();
+        when(pageRepository.findByIdAndMemberId(31L, 42L)).thenReturn(Optional.of(page));
+        when(pageRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        JarStickerRequest request = new JarStickerRequest(List.of(item(StickerType.CLOVER, 1)));
+
+        JarStickerResponse response = service.replace(42L, 31L, request);
+
+        assertThat(response.items()).extracting(JarStickerResponse.Item::zIndex).containsExactly(1);
+    }
+
+    @Test
     void rejectsDuplicateZIndexBeforeDatabaseAccess() {
         JarStickerRequest request = new JarStickerRequest(List.of(
                 item(StickerType.CLOVER, 0), item(StickerType.CAMERA, 0)));
