@@ -26,6 +26,8 @@ public record JarStickerRequest(
             @DecimalMin("0.0") @DecimalMax("1.0") @Schema(example = "0.42") double yRatio,
             @DecimalMin("0.5") @DecimalMax("2.0") @Schema(example = "1.0") double scale,
             @DecimalMin("-180.0") @DecimalMax("180.0") @Schema(example = "0") double rotation,
-            @Min(0) @Max(19) @Schema(example = "0") int zIndex
+            @Min(0) @Max(19)
+            @Schema(description = "페이지 내 레이어 순서. 0~19에서 중복될 수 없으며 빈 순번은 허용", example = "0")
+            int zIndex
     ) { }
 }

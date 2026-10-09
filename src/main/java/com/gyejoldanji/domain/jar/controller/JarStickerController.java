@@ -87,7 +87,8 @@ public class JarStickerController {
     }
 
     /** 화면의 최종 스냅샷으로 배치를 전체 저장한다. */
-    @Operation(summary = "단지 스티커 전체 저장", description = "기존 배치를 최종 items 상태로 전체 교체합니다.")
+    @Operation(summary = "단지 스티커 전체 저장",
+            description = "기존 배치를 최종 items 상태로 전체 교체합니다. zIndex는 페이지 내에서 유일해야 하며 빈 순번은 허용합니다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "저장 성공",
                     content = @Content(schema = @Schema(implementation = JarStickerApiResponse.class))),

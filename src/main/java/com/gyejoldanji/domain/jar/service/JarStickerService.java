@@ -68,8 +68,5 @@ public class JarStickerService {
                 throw new BusinessException(ErrorCode.INVALID_INPUT);
             }
         }
-        for (int index = 0; index < items.size(); index++) {
-            if (!indexes.contains(index)) throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
     }
 }
