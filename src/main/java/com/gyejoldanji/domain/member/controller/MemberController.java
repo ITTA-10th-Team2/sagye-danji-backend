@@ -1,9 +1,12 @@
 package com.gyejoldanji.domain.member.controller;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.member.dto.MemberResponse;
 import com.gyejoldanji.domain.member.service.MemberService;
+import com.gyejoldanji.domain.member.service.MemberService.OnboardingCompletionResult;
 import com.gyejoldanji.global.common.response.ApiResponse;
 import com.gyejoldanji.global.security.CurrentMember;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MemberController {
 
     private final MemberService memberService;
+    private final ServerAnalyticsRecorder analyticsRecorder;
 
     /** 내 정보와 온보딩 상태. */
     @GetMapping("/me")
@@ -32,12 +36,21 @@ public class MemberController {
         return ApiResponse.ok(memberService.getMe(currentMember.memberId()));
     }
 
-    /** 온보딩 완료. 요청 본문은 받지 않으며 완료 시각은 서버가 정한다. 반복 요청도 최초 완료 시각으로 200이다. */
+    /**
+     * 온보딩 완료. 요청 본문은 받지 않으며 완료 시각은 서버가 정한다. 반복 요청도 최초 완료 시각으로 200이다. 최초 완료일 때만
+     * 서버 행동 이벤트를 남긴다.
+     */
     @PostMapping("/me/onboarding/complete")
     public ApiResponse<MemberResponse> completeOnboarding(
-            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember, HttpServletResponse response) {
+            @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember, HttpServletRequest request,
+            HttpServletResponse response) {
         noStore(response);
-        return ApiResponse.ok(memberService.completeOnboarding(currentMember));
+        OnboardingCompletionResult result = memberService.completeOnboarding(currentMember);
+        if (result.newlyCompleted()) {
+            ServerAnalyticsRecorder.ignoringFailure(
+                    () -> analyticsRecorder.onboardingCompleted(currentMember.memberId(), request));
+        }
+        return ApiResponse.ok(result.member());
     }
 
     private static void noStore(HttpServletResponse response) {
