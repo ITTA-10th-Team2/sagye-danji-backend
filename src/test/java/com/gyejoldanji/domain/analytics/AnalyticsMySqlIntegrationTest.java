@@ -23,6 +23,7 @@ import com.gyejoldanji.domain.analytics.entity.AnalyticsEvent;
 import com.gyejoldanji.domain.analytics.repository.AnalyticsEventRepository;
 import com.gyejoldanji.domain.analytics.service.AnalyticsEventValidator;
 import com.gyejoldanji.domain.analytics.service.AnalyticsService;
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
 import com.gyejoldanji.global.config.ClockConfig;
@@ -43,6 +44,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -72,6 +74,8 @@ class AnalyticsMySqlIntegrationTest {
     @Autowired
     private AnalyticsService service;
     @Autowired
+    private ServerAnalyticsRecorder recorder;
+    @Autowired
     private DataSource dataSource;
     @Autowired
     private Environment environment;
@@ -84,7 +88,7 @@ class AnalyticsMySqlIntegrationTest {
     @Configuration(proxyBeanMethods = false)
     @EntityScan(basePackageClasses = {Member.class, AnalyticsEvent.class})
     @EnableJpaRepositories(basePackageClasses = {MemberRepository.class, AnalyticsEventRepository.class})
-    @Import({ClockConfig.class, AnalyticsEventValidator.class, AnalyticsService.class})
+    @Import({ClockConfig.class, AnalyticsEventValidator.class, AnalyticsService.class, ServerAnalyticsRecorder.class})
     static class Config {
 
         /** 분석 Repository를 감싸 기존 eventId 조회가 끝난 뒤 {@link #afterLookup}에서 기다리게 한다. */
@@ -240,6 +244,38 @@ class AnalyticsMySqlIntegrationTest {
             Thread.sleep(20);
         }
         fail("members 행 잠금 대기가 " + requests.length + "개 생기지 않았다");
+    }
+
+    /**
+     * 서버 이벤트는 트랜잭션 밖에서 불려 SERVER 행 1건을 남긴다. 빈 스티커 저장은 stickerCount 0이고, 세션 헤더는 소문자로, 틀린 OS 헤더는
+     * 그 칸만 NULL이다. 발생·수신 시각은 같고 KST JVM에서도 UTC로 저장된다.
+     */
+    @Test
+    void recorderStoresOneServerEvent() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Analytics-Session-Id", SESSION.toUpperCase());
+        request.addHeader("X-Client-Version", "1.0.0");
+        request.addHeader("X-Client-OS", "ios");
+
+        recorder.stickersSaved(memberId, 31L, 0, request);
+
+        assertThat(jdbc.queryForList("SELECT event_name, event_source, session_id, service_version, os, `sequence`, "
+                + "JSON_EXTRACT(properties, '$.jarPageId') AS jar_page_id, "
+                + "JSON_EXTRACT(properties, '$.stickerCount') AS sticker_count, occurred_at = received_at AS same_time, "
+                + "ABS(TIMESTAMPDIFF(SECOND, occurred_at, UTC_TIMESTAMP(6))) < 60 AS utc_now "
+                + "FROM analytics_events WHERE member_id = ?", memberId))
+                .singleElement().satisfies(row -> {
+                    assertThat(row.get("event_name")).isEqualTo("STICKER_SAVE");
+                    assertThat(row.get("event_source")).isEqualTo("SERVER");
+                    assertThat(row.get("session_id")).isEqualTo(SESSION);
+                    assertThat(row.get("service_version")).isEqualTo("1.0.0");
+                    assertThat(row.get("os")).isNull();
+                    assertThat(row.get("sequence")).isNull();
+                    assertThat(String.valueOf(row.get("jar_page_id"))).isEqualTo("31");
+                    assertThat(String.valueOf(row.get("sticker_count"))).isEqualTo("0");
+                    assertThat(((Number) row.get("same_time")).intValue()).isEqualTo(1);
+                    assertThat(((Number) row.get("utc_now")).intValue()).isEqualTo(1);
+                });
     }
 
     /** 이번 실행 전용 ACTIVE 회원을 만들고 정리 목록에 넣는다. */

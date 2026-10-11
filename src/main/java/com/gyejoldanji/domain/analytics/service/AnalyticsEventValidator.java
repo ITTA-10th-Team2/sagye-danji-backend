@@ -161,22 +161,38 @@ public class AnalyticsEventValidator {
         return value.toLowerCase(Locale.ROOT);
     }
 
-    /** 1~30 code point, 앞뒤 공백·제어문자·짝 없는 surrogate 없음. 자르거나 trim하지 않는다. */
     private static String serviceVersion(JsonNode node) {
         String value = text(node);
-        int length = value.codePointCount(0, value.length());
-        if (length < 1 || length > MAX_SERVICE_VERSION_CODE_POINTS || !value.strip().equals(value)
-                || value.codePoints().anyMatch(c -> Character.isISOControl(c)
-                        || Character.getType(c) == Character.SURROGATE)) {
+        if (!isServiceVersion(value)) {
             throw invalid();
         }
         return value;
     }
 
     private static ClientOs os(JsonNode node) {
-        String value = text(node);
-        return Arrays.stream(ClientOs.values()).filter(os -> os.name().equals(value)).findFirst()
-                .orElseThrow(AnalyticsEventValidator::invalid);
+        ClientOs os = clientOs(text(node));
+        if (os == null) {
+            throw invalid();
+        }
+        return os;
+    }
+
+    /** 8-4-4-4-12 UUID(버전 무관)인지. 서버 이벤트의 분석 세션 헤더도 같은 규칙을 쓴다. */
+    static boolean isSessionId(String value) {
+        return SESSION_ID.matcher(value).matches();
+    }
+
+    /** 1~30 code point, 앞뒤 공백·제어문자·짝 없는 surrogate 없음. 자르거나 trim하지 않는다. */
+    static boolean isServiceVersion(String value) {
+        int length = value.codePointCount(0, value.length());
+        return length >= 1 && length <= MAX_SERVICE_VERSION_CODE_POINTS && value.strip().equals(value)
+                && value.codePoints().noneMatch(c -> Character.isISOControl(c)
+                        || Character.getType(c) == Character.SURROGATE);
+    }
+
+    /** 대소문자까지 정확히 일치하는 OS. 아니면 null. */
+    static ClientOs clientOs(String value) {
+        return Arrays.stream(ClientOs.values()).filter(os -> os.name().equals(value)).findFirst().orElse(null);
     }
 
     /** 선택. 있으면 JSON 정수 1 이상(int 범위). null·문자열·소수 표기는 거부한다. */

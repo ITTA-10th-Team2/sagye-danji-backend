@@ -1,5 +1,6 @@
 package com.gyejoldanji.domain.jar.controller;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.jar.dto.JarStickerRequest;
 import com.gyejoldanji.domain.jar.dto.JarStickerResponse;
 import com.gyejoldanji.domain.jar.dto.JarPageResponse;
@@ -17,6 +18,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -44,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class JarStickerController {
     private final JarStickerService service;
     private final JarPageQueryService pageQueryService;
+    private final ServerAnalyticsRecorder analyticsRecorder;
 
     /** 연도·계절의 특정 단지 페이지를 기록·이미지·스티커와 함께 조회한다. */
     @Operation(summary = "단지 페이지 조회", description = "0부터 시작하는 페이지 번호로 최대 5개 기록과 스티커를 조회합니다.")
@@ -102,10 +105,13 @@ public class JarStickerController {
             @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember member,
             @PathVariable @Positive Long jarPageId,
             @Valid @RequestBody JarStickerRequest request,
+            HttpServletRequest httpRequest,
             HttpServletResponse response) {
         noStore(response);
-        return ApiResponse.ok("단지 스티커 저장에 성공했습니다.",
-                service.replace(member.memberId(), jarPageId, request));
+        JarStickerResponse saved = service.replace(member.memberId(), jarPageId, request);
+        ServerAnalyticsRecorder.ignoringFailure(() -> analyticsRecorder.stickersSaved(
+                member.memberId(), jarPageId, request.items().size(), httpRequest));
+        return ApiResponse.ok("단지 스티커 저장에 성공했습니다.", saved);
     }
 
     /** 해당 단지 페이지에 저장된 스티커 전체를 삭제한다. */

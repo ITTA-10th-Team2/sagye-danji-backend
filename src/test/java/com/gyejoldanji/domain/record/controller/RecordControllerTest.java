@@ -1,5 +1,6 @@
 package com.gyejoldanji.domain.record.controller;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
 import com.gyejoldanji.domain.auth.repository.AuthSessionRepository.AuthenticationView;
 import com.gyejoldanji.domain.auth.service.ServiceTokenService;
@@ -12,13 +13,17 @@ import com.gyejoldanji.domain.record.dto.SeasonRecordListItemResponse;
 import com.gyejoldanji.domain.record.service.RecordCommandService;
 import com.gyejoldanji.domain.record.service.RecordQueryService;
 import com.gyejoldanji.global.common.enums.SeasonType;
+import com.gyejoldanji.global.common.exception.BusinessException;
+import com.gyejoldanji.global.common.exception.ErrorCode;
 import com.gyejoldanji.global.security.CurrentMember;
 import com.gyejoldanji.global.security.SecurityTestConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -40,7 +45,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -69,6 +77,8 @@ class RecordControllerTest {
     private RecordCommandService recordCommandService;
     @MockitoBean
     private RecordQueryService recordQueryService;
+    @MockitoBean
+    private ServerAnalyticsRecorder analyticsRecorder;
     @Autowired
     private ServiceTokenService tokenService;
     @Autowired
@@ -98,6 +108,7 @@ class RecordControllerTest {
 
         mockMvc.perform(post(RECORDS)
                         .header("Authorization", authorization)
+                        .header("X-Analytics-Session-Id", SID)
                         .contentType("application/json")
                         .content("""
                                 {
@@ -114,6 +125,50 @@ class RecordControllerTest {
                 .andExpect(jsonPath("$.data.id").value(101))
                 .andExpect(jsonPath("$.data.season").value("AUTUMN"))
                 .andExpect(jsonPath("$.data.image.id").value(501));
+
+        // 서비스가 반환한 기록 ID와 원래 요청(분석 헤더 포함)으로 한 번 남긴다.
+        ArgumentCaptor<HttpServletRequest> request = ArgumentCaptor.forClass(HttpServletRequest.class);
+        verify(analyticsRecorder).recordCompleted(eq(42L), eq(101L), request.capture());
+        assertThat(request.getValue().getHeader("X-Analytics-Session-Id")).isEqualTo(SID);
+    }
+
+    /** 업무 서비스가 실패하면 서버 행동 이벤트를 남기지 않는다. */
+    @Test
+    void doesNotRecordWhenServiceFails() throws Exception {
+        when(recordCommandService.create(eq(42L), any()))
+                .thenThrow(new BusinessException(ErrorCode.IMAGE_ALREADY_ATTACHED));
+        doThrow(new BusinessException(ErrorCode.RECORD_NOT_FOUND)).when(recordCommandService).delete(42L, 101L);
+
+        mockMvc.perform(post(RECORDS).header("Authorization", authorization).contentType("application/json")
+                        .content("{\"objectKey\":\"record-images/42/a.jpg\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(delete(RECORDS + "/101").header("Authorization", authorization))
+                .andExpect(status().isNotFound());
+
+        verifyNoInteractions(analyticsRecorder);
+    }
+
+    /** recorder가 던져도 업무 응답(상태·본문)은 그대로다. */
+    @Test
+    void keepsBusinessResponseWhenRecorderFails() throws Exception {
+        when(recordCommandService.create(eq(42L), any())).thenReturn(response());
+        doThrow(new IllegalStateException("analytics down")).when(analyticsRecorder)
+                .recordCompleted(any(), any(), any());
+        doThrow(new IllegalStateException("analytics down")).when(analyticsRecorder)
+                .recordDeleted(any(), any(), any());
+
+        mockMvc.perform(post(RECORDS).header("Authorization", authorization).contentType("application/json")
+                        .content("{\"objectKey\":\"record-images/42/a.jpg\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("201"))
+                .andExpect(jsonPath("$.message").value("기록 생성에 성공했습니다."))
+                .andExpect(jsonPath("$.data.id").value(101))
+                .andExpect(jsonPath("$.data.image.id").value(501));
+        mockMvc.perform(delete(RECORDS + "/101").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("기록 삭제에 성공했습니다."));
+
+        verify(recordCommandService).delete(42L, 101L);
     }
 
     @Test
@@ -124,7 +179,7 @@ class RecordControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("COMMON_005"));
 
-        verifyNoInteractions(recordCommandService);
+        verifyNoInteractions(recordCommandService, analyticsRecorder);
     }
 
     @Test
@@ -141,6 +196,10 @@ class RecordControllerTest {
         mockMvc.perform(delete(RECORDS + "/101").header("Authorization", authorization))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("기록 삭제에 성공했습니다."));
+
+        // 수정은 서버 행동 이벤트가 아니고 삭제만 경로의 기록 ID로 남긴다.
+        verify(analyticsRecorder).recordDeleted(eq(42L), eq(101L), any());
+        verifyNoMoreInteractions(analyticsRecorder);
     }
 
     @Test

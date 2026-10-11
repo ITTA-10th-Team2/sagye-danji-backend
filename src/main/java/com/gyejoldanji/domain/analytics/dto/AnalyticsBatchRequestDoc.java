@@ -33,7 +33,8 @@ public record AnalyticsBatchRequestDoc(
             ClientOs os,
             @Schema(description = "세션 안 순번(선택, 1 이상 정수)", example = "1")
             Integer sequence,
-            @Schema(description = "UTC 발생 시각(Z 표기). 지금+5분 이후는 거부", requiredMode = Schema.RequiredMode.REQUIRED,
+            @Schema(description = "UTC 발생 시각(Z 표기). 지금+5분 이후와 1000년 이전도 거부",
+                    requiredMode = Schema.RequiredMode.REQUIRED,
                     example = "2026-10-11T03:04:05.123Z")
             String occurredAt,
             @Schema(description = "이벤트별 속성 객체. 필수 속성이 없는 이벤트는 생략 가능",
