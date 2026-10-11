@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.auth.TokenRefreshMySqlIntegrationTest.FaultInjectingDataSource;
 import com.gyejoldanji.domain.auth.TokenRefreshMySqlIntegrationTest.MutableClock;
 import com.gyejoldanji.domain.auth.TokenRefreshMySqlIntegrationTest.Target;
@@ -105,6 +106,9 @@ class SessionLogoutMySqlIntegrationTest {
 
     @MockitoBean
     private TossAnonymousAuthClient tossClient;
+    /** 공유 Config의 MemberController가 쓰는 서버 행동 이벤트 기록은 이 테스트 범위가 아니다. */
+    @MockitoBean
+    private ServerAnalyticsRecorder analyticsRecorder;
     @Autowired
     private AnonymousAuthService anonymousAuthService;
     @Autowired

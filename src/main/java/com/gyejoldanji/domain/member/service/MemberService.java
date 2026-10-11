@@ -55,9 +55,10 @@ public class MemberService {
      *
      * <p>{@link TransactionTemplate}으로 commit까지 이 경계 안에서 끝내고, commit을 포함한 실패는 원인 타입으로 503 COMMON_008 또는
      * 500 COMMON_003으로 바꾼다. 다른 도메인의 무결성 409로 넘기지 않으며 이미 분류된 {@link BusinessException}은 그대로 둔다.
-     * 자동 재시도하지 않고 세션·토큰도 건드리지 않으므로 실패 뒤 같은 Access로 다시 요청할 수 있다.
+     * 자동 재시도하지 않고 세션·토큰도 건드리지 않으므로 실패 뒤 같은 Access로 다시 요청할 수 있다. 이번 요청이 최초 완료인지도 함께
+     * 돌려준다(서버 행동 이벤트는 최초 완료에만 남긴다).
      */
-    public MemberResponse completeOnboarding(CurrentMember currentMember) {
+    public OnboardingCompletionResult completeOnboarding(CurrentMember currentMember) {
         try {
             return transactionTemplate.execute(status -> complete(currentMember.memberId(), currentMember.sessionId()));
         } catch (BusinessException e) {
@@ -71,7 +72,7 @@ public class MemberService {
      * 트랜잭션 안: 회원 → 세션 행 잠금 → 잠금 뒤 새 UTC 시각으로 보호 필터의 검사를 다시 한다 → 미완료일 때만 최초 완료 시각 저장.
      * 필터 통과 뒤 잠금을 기다리는 동안 폐기·만료·비활성화·행 삭제가 있을 수 있어 필터 결과를 믿지 않는다. 이미 완료한 회원도 같다.
      */
-    private MemberResponse complete(Long memberId, Long sessionId) {
+    private OnboardingCompletionResult complete(Long memberId, Long sessionId) {
         Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
         AuthSession session = sessionRepository.findByIdForUpdate(sessionId)
@@ -84,7 +85,17 @@ public class MemberService {
                 || !now.isBefore(session.getExpiresAt())) {
             throw new BusinessException(ErrorCode.AUTH_SESSION_INVALID);
         }
+        boolean newlyCompleted = !member.isOnboardingCompleted();
         member.completeOnboarding(now);
-        return MemberResponse.from(member);
+        return new OnboardingCompletionResult(MemberResponse.from(member), newlyCompleted);
+    }
+
+    /**
+     * 온보딩 완료 결과.
+     *
+     * @param member         응답 본문에 그대로 쓰는 회원 정보
+     * @param newlyCompleted 이번 요청이 최초 완료인지. 이미 완료한 회원의 반복 호출은 false다.
+     */
+    public record OnboardingCompletionResult(MemberResponse member, boolean newlyCompleted) {
     }
 }

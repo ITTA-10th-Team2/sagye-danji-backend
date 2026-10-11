@@ -8,6 +8,7 @@ import com.gyejoldanji.global.common.exception.ErrorCode;
 import com.gyejoldanji.global.config.properties.AppProperties;
 import com.gyejoldanji.global.config.properties.TossProperties;
 import com.gyejoldanji.global.config.properties.TossProperties.IdentityEnvironment;
+import com.gyejoldanji.global.security.AnalyticsRequestBodyLimitFilter;
 import com.gyejoldanji.global.security.AuthRequestBodyLimitFilter;
 import com.gyejoldanji.global.security.JsonSecurityErrorHandler;
 import com.gyejoldanji.global.security.SessionValidationFilter;
@@ -82,12 +83,14 @@ public class SecurityConfig {
                                               TossProperties tossProperties) throws Exception {
         JsonSecurityErrorHandler errors = new JsonSecurityErrorHandler(jsonMapper);
         boolean dev = tossProperties.getIdentityEnvironment() == IdentityEnvironment.DEV;
-        // Bean이 아니므로 두 필터 모두 Servlet 필터로 자동 등록되지 않고 이 체인에만 한 번 들어간다.
+        // Bean이 아니므로 세 필터 모두 Servlet 필터로 자동 등록되지 않고 이 체인에만 한 번 들어간다.
         BearerTokenAuthenticationFilter bearer =
                 new BearerTokenAuthenticationFilter(new ProviderManager(new JwtAuthenticationProvider(jwtDecoder)));
         bearer.setAuthenticationEntryPoint(errors);
         statelessApi(http)
                 .addFilter(bearer)
+                // 분석 수집 POST의 본문 크기·형식을 인증 전에 확인한다.
+                .addFilterBefore(new AnalyticsRequestBodyLimitFilter(errors), BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(new SessionValidationFilter(sessionRepository, clock, errors),
                         BearerTokenAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(errors).accessDeniedHandler(errors))
@@ -112,6 +115,7 @@ public class SecurityConfig {
                             .authenticated();
                     auth.requestMatchers(HttpMethod.PUT, "/api/jar-pages/*/stickers").authenticated();
                     auth.requestMatchers(HttpMethod.DELETE, "/api/jar-pages/*/stickers").authenticated();
+                    auth.requestMatchers(HttpMethod.POST, "/api/analytics/events").authenticated();
                     // 환경과 무관하게 경로는 열어 두고, 실제 응답 여부는 app.swagger.enabled로 springdoc 자체를 켜고 끈다.
                     auth.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
                             .permitAll();

@@ -64,6 +64,15 @@ public enum ErrorCode {
     IMAGE_NOT_UPLOADED(HttpStatus.BAD_REQUEST, "IMAGE_005", "업로드가 완료되지 않은 이미지입니다."),
     IMAGE_STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "IMAGE_006", "이미지 저장소에 일시적으로 접근할 수 없습니다."),
 
+    // Analytics
+    ANALYTICS_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "ANALYTICS_001", "행동 이벤트 요청 형식 또는 속성이 올바르지 않습니다."),
+    ANALYTICS_EVENT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "ANALYTICS_002", "수집할 수 없는 행동 이벤트입니다."),
+    ANALYTICS_OCCURRED_AT_INVALID(HttpStatus.BAD_REQUEST, "ANALYTICS_003", "행동 이벤트 발생 시각이 올바르지 않습니다."),
+    ANALYTICS_REQUEST_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "ANALYTICS_004", "행동 이벤트 요청 크기를 초과했습니다."),
+    // 노션 명세에 없는 추가 제안 코드(팀 합의 전).
+    ANALYTICS_UNSUPPORTED_MEDIA_TYPE(
+            HttpStatus.UNSUPPORTED_MEDIA_TYPE, "ANALYTICS_005", "지원하지 않는 행동 이벤트 전송 형식입니다."),
+
     // Content Sync
     CONTENT_SYNC_INVALID_ROW(
             HttpStatus.BAD_REQUEST,

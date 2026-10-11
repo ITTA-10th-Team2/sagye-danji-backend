@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.sql.DataSource;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.auth.dto.AnonymousAuthResponse;
 import com.gyejoldanji.domain.auth.entity.AuthSession;
 import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
@@ -115,6 +116,9 @@ class MemberOnboardingMySqlIntegrationTest {
 
     @MockitoBean
     private TossAnonymousAuthClient tossClient;
+    /** MemberController의 서버 행동 이벤트 기록은 이 테스트 범위가 아니다(AnalyticsMySqlIntegrationTest에서 본다). */
+    @MockitoBean
+    private ServerAnalyticsRecorder analyticsRecorder;
     @Autowired
     private AnonymousAuthService anonymousAuthService;
     @Autowired

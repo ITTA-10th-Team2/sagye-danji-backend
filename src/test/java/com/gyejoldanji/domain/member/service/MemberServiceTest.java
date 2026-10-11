@@ -15,6 +15,7 @@ import com.gyejoldanji.domain.member.dto.MemberResponse;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
+import com.gyejoldanji.domain.member.service.MemberService.OnboardingCompletionResult;
 import com.gyejoldanji.global.common.exception.BusinessException;
 import com.gyejoldanji.global.common.exception.ErrorCode;
 import com.gyejoldanji.global.security.CurrentMember;
@@ -103,13 +104,14 @@ class MemberServiceTest {
 
     /**
      * TX 시작 → 회원 잠금 → 세션 잠금 → 시각 1회 → commit 순서다. 일반 조회로 먼저 올리지 않고, 마이크로초 UTC 시각을 최초 완료로
-     * 저장한다. 세션·로그인 시각은 바꾸지 않는다.
+     * 저장한다. 세션·로그인 시각은 바꾸지 않는다. 최초 완료이므로 newlyCompleted다.
      */
     @Test
     void completesWithTimeReadAfterLastLock() {
         member.recordAuthentication(EARLIER);
 
-        MemberResponse response = service.completeOnboarding(CURRENT);
+        OnboardingCompletionResult result = service.completeOnboarding(CURRENT);
+        MemberResponse response = result.member();
 
         InOrder order = inOrder(transactionManager, memberRepository, sessionRepository, clock);
         order.verify(transactionManager).getTransaction(any());
@@ -122,6 +124,7 @@ class MemberServiceTest {
         verify(sessionRepository, never()).findById(anyLong());
 
         assertThat(response).isEqualTo(new MemberResponse("42", "COMPLETED", "2026-10-04T03:04:05.123456Z"));
+        assertThat(result.newlyCompleted()).isTrue();
         assertThat(member.getOnboardingCompletedAt()).isEqualTo(NOW);
         assertThat(member.getLastLoginAt()).isEqualTo(EARLIER);
         assertThat(session.getRevokedAt()).isNull();
@@ -129,14 +132,15 @@ class MemberServiceTest {
         assertThat(session.getExpiresAt()).isEqualTo(NOW.plusDays(1));
     }
 
-    /** 이미 완료한 회원도 잠금·재검사를 거친 뒤 최초 시각 그대로 성공한다. */
+    /** 이미 완료한 회원도 잠금·재검사를 거친 뒤 최초 시각 그대로 성공한다. 반복 호출이므로 newlyCompleted가 아니다. */
     @Test
     void keepsFirstCompletionTime() {
         member.completeOnboarding(EARLIER);
 
-        MemberResponse response = service.completeOnboarding(CURRENT);
+        OnboardingCompletionResult result = service.completeOnboarding(CURRENT);
 
-        assertThat(response.onboardingCompletedAt()).isEqualTo("2026-10-01T00:00:00.000001Z");
+        assertThat(result.member().onboardingCompletedAt()).isEqualTo("2026-10-01T00:00:00.000001Z");
+        assertThat(result.newlyCompleted()).isFalse();
         assertThat(member.getOnboardingCompletedAt()).isEqualTo(EARLIER);
         verify(sessionRepository).findByIdForUpdate(7L);
         verify(clock).instant();
@@ -149,7 +153,7 @@ class MemberServiceTest {
         session = session(member, NOW.plusNanos(1_000));
         when(sessionRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(session));
 
-        assertThat(service.completeOnboarding(CURRENT).onboardingStatus()).isEqualTo("COMPLETED");
+        assertThat(service.completeOnboarding(CURRENT).member().onboardingStatus()).isEqualTo("COMPLETED");
     }
 
     /**

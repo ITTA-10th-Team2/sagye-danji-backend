@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.TimeZone;
 import java.util.UUID;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.auth.entity.AuthSession;
 import com.gyejoldanji.domain.auth.enums.SessionRevokeReason;
 import com.gyejoldanji.domain.auth.repository.AuthSessionRepository;
@@ -56,6 +57,7 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -91,6 +93,8 @@ class MemberControllerTest {
     private MemberRepository memberRepository;
     @MockitoBean
     private PlatformTransactionManager transactionManager;
+    @MockitoBean
+    private ServerAnalyticsRecorder analyticsRecorder;
     @Autowired
     private ServiceTokenService tokenService;
     @Autowired
@@ -233,6 +237,8 @@ class MemberControllerTest {
         verify(sessionRepository).findByIdForUpdate(7L);
         verify(memberRepository, never()).findById(anyLong());
         verify(transactionManager).commit(any());
+        // 최초 완료이므로 commit 뒤 서버 행동 이벤트를 한 번 남긴다.
+        verify(analyticsRecorder).onboardingCompleted(eq(42L), any());
 
         when(memberRepository.findById(42L)).thenReturn(Optional.of(member));
         me().andExpect(status().isOk())
@@ -277,6 +283,25 @@ class MemberControllerTest {
                 .andExpect(jsonPath("$.data.onboardingStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.onboardingCompletedAt").value("2026-10-01T12:00:00.000001Z"));
         verify(sessionRepository).findByIdForUpdate(7L);
+        // 이미 완료한 회원의 반복 호출은 서버 행동 이벤트를 남기지 않는다.
+        verifyNoInteractions(analyticsRecorder);
+    }
+
+    /** recorder가 던져도 최초 완료 응답(200, 본문)은 그대로다. */
+    @Test
+    void keepsCompletionResponseWhenRecorderFails() throws Exception {
+        Member member = member(null);
+        stubLockedRows(member, session(member));
+        doThrow(new IllegalStateException("analytics down")).when(analyticsRecorder).onboardingCompleted(any(), any());
+
+        complete().andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.memberId").value("42"))
+                .andExpect(jsonPath("$.data.onboardingStatus").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.onboardingCompletedAt").value(NOW_MICROS));
+        verify(transactionManager).commit(any());
+        verify(analyticsRecorder).onboardingCompleted(eq(42L), any());
     }
 
     /**
@@ -295,7 +320,7 @@ class MemberControllerTest {
         expectSecurityError(complete(), "AUTH_003");
 
         verify(transactionManager, never()).getTransaction(any());
-        verifyNoInteractions(memberRepository);
+        verifyNoInteractions(memberRepository, analyticsRecorder);
         verify(sessionRepository, never()).findByIdForUpdate(anyLong());
     }
 
@@ -311,6 +336,7 @@ class MemberControllerTest {
         assertThat(member.isOnboardingCompleted()).isFalse();
         verify(transactionManager).rollback(any());
         verify(transactionManager, never()).commit(any());
+        verifyNoInteractions(analyticsRecorder);
     }
 
     /**
@@ -334,6 +360,7 @@ class MemberControllerTest {
         expectError(complete(), 500, "COMMON_003")
                 .andExpect(result -> assertThat(result.getResponse().getContentAsString()).doesNotContain(secret));
         assertThat(output.getAll()).doesNotContain(secret);
+        verifyNoInteractions(analyticsRecorder);
     }
 
     private ResultActions me() throws Exception {
