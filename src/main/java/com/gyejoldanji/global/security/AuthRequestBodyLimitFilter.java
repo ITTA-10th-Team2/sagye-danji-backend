@@ -86,8 +86,11 @@ public class AuthRequestBodyLimitFilter extends OncePerRequestFilter {
         response.getOutputStream().write(json);
     }
 
-    /** 이미 읽은 본문을 다시 제공한다. Servlet 계약대로 getInputStream과 getReader 중 하나만 사용할 수 있다. */
-    private static final class CachedBodyRequest extends HttpServletRequestWrapper {
+    /**
+     * 이미 읽은 본문을 다시 제공한다. Servlet 계약대로 getInputStream과 getReader 중 하나만 사용할 수 있다.
+     * {@link AnalyticsRequestBodyLimitFilter}도 쓴다.
+     */
+    static final class CachedBodyRequest extends HttpServletRequestWrapper {
 
         private final byte[] body;
         private ServletInputStream inputStream;
