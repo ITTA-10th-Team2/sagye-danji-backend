@@ -1,5 +1,6 @@
 package com.gyejoldanji.domain.record.controller;
 
+import com.gyejoldanji.domain.analytics.service.ServerAnalyticsRecorder;
 import com.gyejoldanji.domain.record.dto.RecordCreateRequest;
 import com.gyejoldanji.domain.record.dto.RecordResponse;
 import com.gyejoldanji.domain.record.dto.RecordSummaryResponse;
@@ -18,6 +19,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -49,6 +51,7 @@ public class RecordController {
 
     private final RecordCommandService recordCommandService;
     private final RecordQueryService recordQueryService;
+    private final ServerAnalyticsRecorder analyticsRecorder;
 
     /** 현재 회원의 전체 기록 수와 첫 기록일부터 오늘까지의 누적 일수를 조회한다. */
     @Operation(summary = "홈 기록 요약 조회",
@@ -136,10 +139,13 @@ public class RecordController {
     public ApiResponse<RecordResponse> create(
             @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
             @Valid @RequestBody RecordCreateRequest request,
+            HttpServletRequest httpRequest,
             HttpServletResponse response) {
         noStore(response);
-        return ApiResponse.created("기록 생성에 성공했습니다.",
-                recordCommandService.create(currentMember.memberId(), request));
+        RecordResponse created = recordCommandService.create(currentMember.memberId(), request);
+        ServerAnalyticsRecorder.ignoringFailure(
+                () -> analyticsRecorder.recordCompleted(currentMember.memberId(), created.id(), httpRequest));
+        return ApiResponse.created("기록 생성에 성공했습니다.", created);
     }
 
     /** 현재 회원이 소유한 기록의 날짜·메모와 선택적인 단일 이미지를 수정한다. */
@@ -210,9 +216,12 @@ public class RecordController {
             @AuthenticationPrincipal(errorOnInvalidType = true) CurrentMember currentMember,
             @Parameter(description = "삭제할 양수 기록 ID. 기록 생성 응답의 data.id 사용", example = "1")
             @PathVariable @Positive Long recordId,
+            HttpServletRequest httpRequest,
             HttpServletResponse response) {
         noStore(response);
         recordCommandService.delete(currentMember.memberId(), recordId);
+        ServerAnalyticsRecorder.ignoringFailure(
+                () -> analyticsRecorder.recordDeleted(currentMember.memberId(), recordId, httpRequest));
         return ApiResponse.ok("기록 삭제에 성공했습니다.");
     }
 
