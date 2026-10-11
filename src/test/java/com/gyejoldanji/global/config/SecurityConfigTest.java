@@ -17,6 +17,7 @@ import com.gyejoldanji.domain.auth.service.ServiceTokenService;
 import com.gyejoldanji.domain.member.enums.MemberStatus;
 import com.gyejoldanji.domain.test.controller.TestController;
 import com.gyejoldanji.global.config.properties.AuthProperties;
+import com.gyejoldanji.global.security.AnalyticsRequestBodyLimitFilter;
 import com.gyejoldanji.global.security.AuthRequestBodyLimitFilter;
 import com.gyejoldanji.global.security.CurrentMember;
 import com.gyejoldanji.global.security.SecurityTestConfig;
@@ -80,6 +81,7 @@ class SecurityConfigTest {
     private static final String ORIGIN = SecurityTestConfig.ALLOWED_ORIGIN;
     private static final String SID = UUID.randomUUID().toString();
     private static final String ONBOARDING = "/api/members/me/onboarding/complete";
+    private static final String ANALYTICS = "/api/analytics/events";
     private static final AtomicInteger CONTROLLER_CALLS = new AtomicInteger();
 
     @TempDir
@@ -109,7 +111,10 @@ class SecurityConfigTest {
         CONTROLLER_CALLS.set(0);
     }
 
-    /** 1번 체인은 정확한 세 경로(메서드 무관)만 맡고, 본문 제한은 1번에만·세션 필터는 2번 Bearer 바로 뒤에 한 번씩 있다. */
+    /**
+     * 1번 체인은 정확한 세 경로(메서드 무관)만 맡고, 인증 본문 제한은 1번에만·세션 필터는 2번 Bearer 바로 뒤에 한 번씩 있다. 분석 본문
+     * 제한은 2번 Bearer 앞에 한 번 있다.
+     */
     @Test
     void separatesChainsAndRegistersFiltersOnce() {
         runner("DEV", ORIGIN).run(context -> {
@@ -141,6 +146,9 @@ class SecurityConfigTest {
             assertThat(count(api, AuthRequestBodyLimitFilter.class)).isZero();
             int bearer = indexOf(apiFilters, BearerTokenAuthenticationFilter.class);
             assertThat(apiFilters.get(bearer + 1)).isInstanceOf(SessionValidationFilter.class);
+            assertThat(count(api, AnalyticsRequestBodyLimitFilter.class)).isOne();
+            assertThat(count(auth, AnalyticsRequestBodyLimitFilter.class)).isZero();
+            assertThat(indexOf(apiFilters, AnalyticsRequestBodyLimitFilter.class)).isLessThan(bearer);
 
             for (SecurityFilterChain chain : chains) {
                 for (Class<?> disabled : List.of(CsrfFilter.class, LogoutFilter.class, BasicAuthenticationFilter.class,
@@ -150,6 +158,28 @@ class SecurityConfigTest {
             }
             assertThat(context.getBeansOfType(AuthRequestBodyLimitFilter.class)).isEmpty();
             assertThat(context.getBeansOfType(SessionValidationFilter.class)).isEmpty();
+            assertThat(context.getBeansOfType(AnalyticsRequestBodyLimitFilter.class)).isEmpty();
+        });
+    }
+
+    /** 분석 수집은 인증된 POST만 컨트롤러로 간다. 다른 메서드는 인증해도 403, Bearer 없는 POST는 401이다. */
+    @Test
+    void protectedChainAllowsOnlyPostAnalytics() {
+        withMvc("PROD", mvc -> {
+            when(repository.findAuthenticationView(SID, 42L)).thenReturn(Optional.of(activeView()));
+            String token = bearer(tokenService, Instant.now());
+
+            mvc.perform(post(ANALYTICS).header("Authorization", token).contentType("application/json")
+                            .content("{}"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string("analytics"));
+            assertThat(CONTROLLER_CALLS).hasValue(1);
+
+            for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)) {
+                expectError(mvc.perform(request(method, ANALYTICS).header("Authorization", token)), 403, "COMMON_006");
+            }
+            expectError(mvc.perform(post(ANALYTICS).contentType("application/json").content("{}")), 401, "COMMON_005");
+            assertThat(CONTROLLER_CALLS).hasValue(1);
         });
     }
 
@@ -508,6 +538,12 @@ class SecurityConfigTest {
         String docs() {
             CONTROLLER_CALLS.incrementAndGet();
             return "docs";
+        }
+
+        @RequestMapping(ANALYTICS)
+        String analytics() {
+            CONTROLLER_CALLS.incrementAndGet();
+            return "analytics";
         }
 
         @RequestMapping("/api/other")
