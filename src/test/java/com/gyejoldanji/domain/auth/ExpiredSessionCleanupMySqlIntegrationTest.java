@@ -48,6 +48,7 @@ import com.gyejoldanji.domain.auth.service.ServiceTokenService;
 import com.gyejoldanji.domain.auth.service.SessionLogoutService;
 import com.gyejoldanji.domain.auth.service.TokenRefreshService;
 import com.gyejoldanji.domain.image.entity.Image;
+import com.gyejoldanji.domain.jar.entity.JarPage;
 import com.gyejoldanji.domain.member.entity.Member;
 import com.gyejoldanji.domain.member.repository.MemberRepository;
 import com.gyejoldanji.domain.record.entity.Record;
@@ -93,7 +94,7 @@ import static org.assertj.core.api.Assertions.fail;
  * 실제 MySQL로 만료 이력 정리를 검증한다(작업 08: T28의 삭제 범위·시각 경계·배치 commit·rollback·Refresh/logout 경합).
  *
  * <p>정리는 DB 전체에서 대상을 찾으므로 공유 DB를 쓰지 않는다. {@code AUTH_IT_DB_URL}의 서버·계정(CREATE/DROP DATABASE 권한 필요)으로
- * 이번 실행 전용 DB를 새로 만들고 회원·인증·기록·사진 테이블을 Hibernate {@code create-only}로 만든 뒤, 끝나면 그 DB만 삭제한다. 전용 인증 DB와
+ * 이번 실행 전용 DB를 새로 만들고 회원·인증·단지 페이지·기록·사진 테이블을 Hibernate {@code create-only}로 만든 뒤, 끝나면 그 DB만 삭제한다. 전용 인증 DB와
  * 앱 기본 DB의 행은 건드리지 않는다. 스케줄러는 이 컨텍스트에 등록하지 않아 자동 실행이 없다. {@code AUTH_IT_DB_URL}이 있을 때만 실행한다.
  *
  * <p>JVM과 legacy URL 시간대는 Asia/Seoul이다. 시각 fixture는 {@code FROM_UNIXTIME(epoch)}로 넣고 {@code UNIX_TIMESTAMP}로 읽어, 앱의
@@ -148,7 +149,7 @@ class ExpiredSessionCleanupMySqlIntegrationTest {
     private int memberSeq;
 
     @Configuration(proxyBeanMethods = false)
-    @EntityScan(basePackageClasses = {Member.class, AuthSession.class, Record.class, Image.class})
+    @EntityScan(basePackageClasses = {Member.class, AuthSession.class, Record.class, Image.class, JarPage.class})
     @EnableJpaRepositories(basePackageClasses = {MemberRepository.class, AuthSessionRepository.class})
     @EnableJpaAuditing(dateTimeProviderRef = "utcDateTimeProvider")
     @Import({SecurityTestConfig.class, ServiceTokenService.class, TokenRefreshService.class, SessionLogoutService.class,
@@ -241,7 +242,8 @@ class ExpiredSessionCleanupMySqlIntegrationTest {
         pool.shutdownNow();
         authProperties.setExpiredSessionRetentionDays(7);
         assertThat(jdbc.queryForObject("SELECT DATABASE()", String.class)).isEqualTo(DATABASE);
-        for (String table : List.of("images", "records", "auth_refresh_tokens", "auth_sessions", "members")) {
+        for (String table : List.of("images", "records", "jar_page_stickers", "jar_pages", "auth_refresh_tokens",
+                "auth_sessions", "members")) {
             jdbc.update("DELETE FROM " + table);
         }
     }
@@ -949,18 +951,21 @@ class ExpiredSessionCleanupMySqlIntegrationTest {
                 + "'2026-09-01 00:00:00')", rows);
     }
 
-    /** 회원의 기록 count개와 기록마다 사진 2장. */
+    /** 회원의 기록 count개와 기록마다 사진 1장(#54 단일 이미지 제약). */
     private void records(long memberId, int count) {
+        jdbc.update("INSERT INTO jar_pages (member_id, page_year, season, page_number) VALUES (?, 2026, 'AUTUMN', 1) "
+                + "ON DUPLICATE KEY UPDATE id = id", memberId);
+        long jarPageId = jdbc.queryForObject("SELECT id FROM jar_pages WHERE member_id = ? AND page_year = 2026 "
+                + "AND season = 'AUTUMN' AND page_number = 1", Long.class, memberId);
         for (int i = 0; i < count; i++) {
             String memo = "memo-" + memberId + "-" + i;
-            jdbc.update("INSERT INTO records (member_id, record_date, season, memo, created_at, updated_at) VALUES "
-                    + "(?, '2026-09-01', 'AUTUMN', ?, '2026-09-01 00:00:00', '2026-09-01 00:00:00')", memberId, memo);
+            jdbc.update("INSERT INTO records (member_id, jar_page_id, record_date, season, memo, created_at, updated_at) "
+                    + "VALUES (?, ?, '2026-09-01', 'AUTUMN', ?, '2026-09-01 00:00:00', '2026-09-01 00:00:00')",
+                    memberId, jarPageId, memo);
             long recordId = jdbc.queryForObject("SELECT id FROM records WHERE memo = ?", Long.class, memo);
-            for (int order = 0; order < 2; order++) {
-                jdbc.update("INSERT INTO images (record_id, original_key, thumbnail_key, source, sort_order, created_at) "
-                        + "VALUES (?, ?, NULL, 'CAMERA', ?, '2026-09-01 00:00:00')", recordId,
-                        "original/" + recordId + "/" + order, order);
-            }
+            jdbc.update("INSERT INTO images (record_id, original_key, thumbnail_key, source, sort_order, created_at) "
+                    + "VALUES (?, ?, NULL, 'CAMERA', ?, '2026-09-01 00:00:00')", recordId,
+                    "original/" + recordId + "/0", 0);
         }
     }
 
@@ -995,9 +1000,10 @@ class ExpiredSessionCleanupMySqlIntegrationTest {
                 + "UNIX_TIMESTAMP(consumed_at) AS consumed_at, created_at, updated_at FROM auth_refresh_tokens ORDER BY id");
     }
 
-    /** 정리가 바꾸면 안 되는 회원·기록·사진 전체. */
+    /** 정리가 바꾸면 안 되는 회원·단지 페이지·기록·사진 전체. */
     private Map<String, Object> preserved() {
         return Map.of("members", jdbc.queryForList("SELECT * FROM members ORDER BY id"),
+                "jar_pages", jdbc.queryForList("SELECT * FROM jar_pages ORDER BY id"),
                 "records", jdbc.queryForList("SELECT * FROM records ORDER BY id"),
                 "images", jdbc.queryForList("SELECT * FROM images ORDER BY id"));
     }
