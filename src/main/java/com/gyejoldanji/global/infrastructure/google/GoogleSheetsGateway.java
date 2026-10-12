@@ -2,6 +2,7 @@ package com.gyejoldanji.global.infrastructure.google;
 
 import com.google.api.client.http.HttpResponseException;
 import com.google.api.services.sheets.v4.Sheets;
+import com.google.api.services.sheets.v4.model.AppendDimensionRequest;
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest;
 import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest;
 import com.google.api.services.sheets.v4.model.BooleanCondition;
@@ -54,6 +55,38 @@ public class GoogleSheetsGateway {
                 .setValueInputOption("RAW")
                 .setData(data);
         executeWithRetry(() -> sheets.spreadsheets().values().batchUpdate(spreadsheetId, request).execute());
+    }
+
+    /** 값 쓰기 전에 필요한 행 수를 확보한다. 재시도에 따른 여분의 빈 행은 허용한다. */
+    public void ensureRowCapacity(String spreadsheetId, String sheetName, int requiredRows) {
+        if (requiredRows < 1) {
+            throw new IllegalArgumentException("requiredRows must be positive");
+        }
+        List<Sheet> sheetList = executeWithRetry(() -> sheets.spreadsheets()
+                .get(spreadsheetId)
+                .setFields("sheets.properties(sheetId,title,gridProperties.rowCount)")
+                .execute()).getSheets();
+        if (sheetList == null) {
+            throw new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR);
+        }
+        Sheet target = sheetList.stream()
+                .filter(sheet -> sheet.getProperties() != null
+                        && sheetName.equals(sheet.getProperties().getTitle()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR));
+        if (target.getProperties().getGridProperties() == null
+                || target.getProperties().getGridProperties().getRowCount() == null) {
+            throw new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR);
+        }
+        int currentRows = target.getProperties().getGridProperties().getRowCount();
+        if (currentRows < requiredRows) {
+            Request request = new Request().setAppendDimension(new AppendDimensionRequest()
+                    .setSheetId(target.getProperties().getSheetId())
+                    .setDimension("ROWS")
+                    .setLength(requiredRows - currentRows));
+            executeWithRetry(() -> sheets.spreadsheets().batchUpdate(spreadsheetId,
+                    new BatchUpdateSpreadsheetRequest().setRequests(List.of(request))).execute());
+        }
     }
 
     /** 지정한 범위의 기존 값을 삭제한다. */

@@ -28,7 +28,7 @@ import org.hibernate.type.SqlTypes;
 /**
  * 행동 이벤트 원본 한 건. 컬럼·제약·인덱스는 {@code docs/db/migrations/06-analytics-events.sql}과 같다. 회원 FK는 두지 않는다.
  *
- * <p>시각은 모두 UTC 마이크로초다. 저장 뒤에는 바꾸지 않는다.
+ * <p>시각은 모두 UTC 마이크로초다. 원본은 바꾸지 않고 시트 동기화 시각만 표시한다.
  */
 @Entity
 @Table(name = "analytics_events",
@@ -99,7 +99,7 @@ public class AnalyticsEvent {
     @Column(name = "properties", nullable = false, updatable = false)
     private String properties;
 
-    /** 시트 동기화 시각. 이번 범위에서는 쓰지 않는다. */
+    /** 시트에 쓴 뒤 별도 트랜잭션에서 표시하는 UTC 동기화 시각. */
     @Column(name = "sheet_synced_at", columnDefinition = "datetime(6)")
     private LocalDateTime sheetSyncedAt;
 
