@@ -48,6 +48,16 @@ app:
   google-sheets:
     enabled: ${GOOGLE_SHEETS_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
+  analytics:
+    google-sheets:
+      enabled: ${ANALYTICS_SHEETS_ENABLED:false}
+      spreadsheet-id: ${ANALYTICS_SHEETS_SPREADSHEET_ID:}
+      sheet-name: ${ANALYTICS_SHEETS_SHEET_NAME:analytics_events}
+      sync-cron: ${ANALYTICS_SHEETS_SYNC_CRON:0 */10 * * * *}
+      sync-zone: ${ANALYTICS_SHEETS_SYNC_ZONE:Asia/Seoul}
+      batch-size: ${ANALYTICS_SHEETS_BATCH_SIZE:500}
+      max-batches-per-run: ${ANALYTICS_SHEETS_MAX_BATCHES:10}
+      user-key-secret: ${ANALYTICS_USER_KEY_SECRET:}
   content-sync:
     google-sheets:
       spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
