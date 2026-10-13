@@ -38,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -124,6 +125,7 @@ class RecordCommandServiceTest {
         Member member = member(42L);
         Record record = record(member, 100L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN);
         Image removed = image(record, 501L, "record-images/42/a.jpg", 0);
+        when(memberRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(member));
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(removed));
         when(imageRepository.existsByOriginalKeyIn(any())).thenReturn(false);
@@ -163,6 +165,7 @@ class RecordCommandServiceTest {
 
     @Test
     void returnsSameNotFoundForMissingOrOtherMembersRecord() {
+        when(memberRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(member(42L)));
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.empty());
         RecordUpdateRequest request = new RecordUpdateRequest(LocalDate.of(2026, 10, 4), null, null);
 
@@ -189,7 +192,9 @@ class RecordCommandServiceTest {
         assertThat(response.season()).isEqualTo(SeasonType.WINTER);
         assertThat(response.image().id()).isEqualTo(501L);
         verify(imageRepository, never()).deleteAll(anyList());
-        verify(recordRepository).flush();
+        verify(jarPageAllocationService).compact(member, 2026, SeasonType.AUTUMN);
+        verify(jarPageAllocationService).compact(member, 2026, SeasonType.WINTER);
+        verify(recordRepository, times(2)).flush();
     }
 
     @Test
@@ -198,6 +203,7 @@ class RecordCommandServiceTest {
         Record record = record(member, 100L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN);
         Image first = image(record, 501L, "record-images/42/a.jpg", 0);
         Image second = image(record, 502L, "record-images/42/b.jpg", 1);
+        when(memberRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(member));
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(List.of(first, second));
         RecordUpdateRequest request = new RecordUpdateRequest(LocalDate.of(2026, 10, 4), null, null);
@@ -213,6 +219,7 @@ class RecordCommandServiceTest {
         Member member = member(42L);
         Record record = record(member, 100L, LocalDate.of(2026, 10, 4), SeasonType.AUTUMN);
         List<Image> images = List.of(image(record, 501L, "record-images/42/a.jpg", 0));
+        when(memberRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(member));
         when(recordRepository.findOwnedByIdForUpdate(100L, 42L)).thenReturn(Optional.of(record));
         when(imageRepository.findAllByRecordIdForUpdate(100L)).thenReturn(images);
 
@@ -221,7 +228,8 @@ class RecordCommandServiceTest {
         verify(imageRepository).deleteAll(images);
         verify(imageRepository).flush();
         verify(recordRepository).delete(record);
-        verify(recordRepository).flush();
+        verify(recordRepository, times(2)).flush();
+        verify(jarPageAllocationService).compact(member, 2026, SeasonType.AUTUMN);
         verify(imageStorageService).scheduleDeletionAfterCommit(images);
     }
 
