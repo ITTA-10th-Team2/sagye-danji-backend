@@ -58,7 +58,18 @@ public class AnalyticsSheetSyncService {
             String spreadsheetId = properties.getSpreadsheetId();
             String sheetName = properties.getSheetName();
             String rangePrefix = "'" + sheetName.replace("'", "''") + "'!";
+            String lastColumn = "";
+            for (int column = AnalyticsSheetRowMapper.HEADERS.size(); column > 0; column = (column - 1) / 26) {
+                lastColumn = (char) ('A' + (column - 1) % 26) + lastColumn;
+            }
             List<List<Object>> idsColumn = gateway.readValues(spreadsheetId, rangePrefix + "A:A");
+            Object headerCell = idsColumn.isEmpty() || idsColumn.getFirst().isEmpty()
+                    ? null : idsColumn.getFirst().getFirst();
+            if (headerCell != null && !"".equals(headerCell) && !"event_id".equals(headerCell)) {
+                log.warn("행동 이벤트 시트 동기화 건너뜀: A1 헤더 불일치, written=0, existing=0");
+                return;
+            }
+            gateway.ensureColumnCapacity(spreadsheetId, sheetName, AnalyticsSheetRowMapper.HEADERS.size());
             // 중간 빈 행도 위치를 차지하므로 event_id 집합 크기로 다음 행을 계산하지 않는다.
             int lastRow = idsColumn.size();
             Set<String> seen = new HashSet<>();
@@ -67,11 +78,15 @@ public class AnalyticsSheetSyncService {
                     seen.add(row.get(0).toString());
                 }
             }
+            String headerRange = rangePrefix + "A1:" + lastColumn + "1";
+            List<List<Object>> header = gateway.readValues(spreadsheetId, headerRange);
             if (lastRow == 0) {
                 gateway.ensureRowCapacity(spreadsheetId, sheetName, 1);
-                gateway.batchUpdateValues(spreadsheetId,
-                        Map.of(rangePrefix + "A1:W1", List.of(new ArrayList<>(AnalyticsSheetRowMapper.HEADERS))));
                 lastRow = 1;
+            }
+            if (!header.equals(List.of(AnalyticsSheetRowMapper.HEADERS))) {
+                gateway.batchUpdateValues(spreadsheetId,
+                        Map.of(headerRange, List.of(new ArrayList<>(AnalyticsSheetRowMapper.HEADERS))));
             }
 
             for (int batch = 0; batch < maxBatches; batch++) {
@@ -89,7 +104,7 @@ public class AnalyticsSheetSyncService {
                     int endRow = Math.addExact(lastRow, rows.size());
                     gateway.ensureRowCapacity(spreadsheetId, sheetName, endRow);
                     gateway.batchUpdateValues(spreadsheetId,
-                            Map.of(rangePrefix + "A" + (lastRow + 1) + ":W" + endRow, rows));
+                            Map.of(rangePrefix + "A" + (lastRow + 1) + ":" + lastColumn + endRow, rows));
                     written += rows.size();
                     lastRow = endRow;
                 }

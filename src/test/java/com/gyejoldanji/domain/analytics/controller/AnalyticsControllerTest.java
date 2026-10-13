@@ -95,6 +95,26 @@ class AnalyticsControllerTest {
     }
 
     @Test
+    void collectsSessionStartWithUnchangedProperties() throws Exception {
+        byte[] body = """
+                {"events":[{"eventId":"%s","eventName":"SESSION_START","sessionId":"%s",
+                "serviceVersion":"1.0.0","os":"WEB","sequence":1,"occurredAt":"2026-10-01T01:02:03Z",
+                "properties":{"referrer":"external__owned_social","shareScreen":"JAR"}}]}
+                """.formatted(UUID.randomUUID(), SID).getBytes(StandardCharsets.UTF_8);
+        when(analyticsService.collect(42L, body)).thenReturn(new AnalyticsBatchResponse(1, 0));
+
+        mockMvc.perform(events(body).header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value("200"))
+                .andExpect(jsonPath("$.data.acceptedCount").value(1))
+                .andExpect(jsonPath("$.data.duplicateCount").value(0));
+        verify(analyticsService).collect(42L, body);
+    }
+
+    @Test
     void rejectsMissingTokenBeforeService() throws Exception {
         mockMvc.perform(events(BODY))
                 .andExpect(status().isUnauthorized())

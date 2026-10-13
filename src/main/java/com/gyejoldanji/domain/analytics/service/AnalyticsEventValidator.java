@@ -68,10 +68,13 @@ public class AnalyticsEventValidator {
     private static final List<String> ENTRY_SOURCES = List.of("APP_OPEN", "INTERNAL_NAVIGATION", "BACK_NAVIGATION");
     // 프론트 src/lib/analytics.ts와 맞출 것(HOME_ELEMENT_TAP target).
     private static final List<String> HOME_TARGETS = List.of("CHARACTER", "SPEECH_BUBBLE", "SEASON_OBJECT");
-    // 프론트 src/lib/analytics.ts와 맞출 것(AnalyticsScreen: previousScreen·sourceScreen·screenName).
+    // 프론트 src/lib/analytics.ts와 맞출 것(AnalyticsScreen: previousScreen·sourceScreen·screenName·shareScreen).
     private static final List<String> SCREENS = List.of("ONBOARDING", "HOME", "RECORD_CREATE", "RECORD_DETAIL", "JAR");
     // 프론트 src/lib/analytics.ts와 맞출 것(SHARE_CLICK method).
     private static final List<String> SHARE_METHODS = List.of("SYSTEM_SHARE", "COPY_LINK");
+    // 프론트 src/lib/analytics.ts와 맞출 것(SESSION_START referrer).
+    // https://developers-apps-in-toss.toss.im/documentation/common/growth/analytics/referrer
+    private static final Pattern REFERRER_PATTERN = Pattern.compile("^[A-Za-z0-9_.-]{1,64}$");
 
     /** 이벤트별 허용 속성. 없는 이벤트는 속성이 없다. */
     private static final Map<ClientEventName, List<Prop>> PROPERTIES = new EnumMap<>(Map.of(
@@ -85,7 +88,10 @@ public class AnalyticsEventValidator {
                     Prop.oneOf("method", false, SHARE_METHODS)),
             ClientEventName.SCREEN_ENGAGEMENT, List.of(
                     Prop.oneOf("screenName", true, SCREENS),
-                    Prop.range("durationMs", 0, 86_400_000))));
+                    Prop.range("durationMs", 0, 86_400_000)),
+            ClientEventName.SESSION_START, List.of(
+                    Prop.matching("referrer", false, REFERRER_PATTERN),
+                    Prop.oneOf("shareScreen", false, SCREENS))));
 
     private final Clock clock;
 
@@ -276,18 +282,25 @@ public class AnalyticsEventValidator {
         return new BusinessException(ErrorCode.ANALYTICS_OCCURRED_AT_INVALID);
     }
 
-    /** 속성 규칙. values가 있으면 허용 문자열, 없으면 min~max JSON 정수다. */
-    private record Prop(String name, boolean required, Set<String> values, int min, int max) {
+    /** 속성 규칙. 허용 문자열 목록, 정규식 전체 일치 또는 min~max JSON 정수다. */
+    private record Prop(String name, boolean required, Set<String> values, Pattern pattern, int min, int max) {
 
         static Prop oneOf(String name, boolean required, List<String> values) {
-            return new Prop(name, required, Set.copyOf(values), 0, 0);
+            return new Prop(name, required, Set.copyOf(values), null, 0, 0);
         }
 
         static Prop range(String name, int min, int max) {
-            return new Prop(name, true, null, min, max);
+            return new Prop(name, true, null, null, min, max);
+        }
+
+        static Prop matching(String name, boolean required, Pattern pattern) {
+            return new Prop(name, required, null, pattern, 0, 0);
         }
 
         boolean accepts(JsonNode value) {
+            if (pattern != null) {
+                return value.isString() && pattern.matcher(value.stringValue()).matches();
+            }
             return values != null
                     ? value.isString() && values.contains(value.stringValue())
                     : value.isInt() && value.intValue() >= min && value.intValue() <= max;

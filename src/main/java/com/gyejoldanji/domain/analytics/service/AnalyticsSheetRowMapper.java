@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/** DB 원본을 analytics_events 시트의 A~W 열로 바꾼다. properties_json은 재직렬화하지 않는다. */
+/** DB 원본을 analytics_events 시트의 A~Y 열로 바꾼다. properties_json은 재직렬화하지 않는다. */
 @Component
 @RequiredArgsConstructor
 public class AnalyticsSheetRowMapper {
@@ -20,7 +20,8 @@ public class AnalyticsSheetRowMapper {
     public static final List<String> HEADERS = List.of(
             "event_id", "user_key", "session_id", "event_time", "received_at", "service_version", "os", "event_name",
             "event_source", "sequence", "target", "source", "photo_count", "record_id", "season", "previous_screen",
-            "source_screen", "method", "screen_name", "duration_ms", "jar_page_id", "sticker_count", "properties_json");
+            "source_screen", "method", "screen_name", "duration_ms", "jar_page_id", "sticker_count", "properties_json",
+            "referrer", "share_screen");
 
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX", Locale.ROOT);
@@ -38,7 +39,8 @@ public class AnalyticsSheetRowMapper {
                 property(properties, "photoCount"), property(properties, "recordId"), property(properties, "season"),
                 property(properties, "previousScreen"), property(properties, "sourceScreen"), property(properties, "method"),
                 property(properties, "screenName"), property(properties, "durationMs"), property(properties, "jarPageId"),
-                property(properties, "stickerCount"), event.getProperties());
+                property(properties, "stickerCount"), event.getProperties(), property(properties, "referrer"),
+                property(properties, "shareScreen"));
     }
 
     private static Object cell(Object value) {

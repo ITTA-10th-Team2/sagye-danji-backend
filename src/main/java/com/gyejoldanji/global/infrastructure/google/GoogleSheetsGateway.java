@@ -59,12 +59,22 @@ public class GoogleSheetsGateway {
 
     /** 값 쓰기 전에 필요한 행 수를 확보한다. 재시도에 따른 여분의 빈 행은 허용한다. */
     public void ensureRowCapacity(String spreadsheetId, String sheetName, int requiredRows) {
-        if (requiredRows < 1) {
-            throw new IllegalArgumentException("requiredRows must be positive");
+        ensureDimensionCapacity(spreadsheetId, sheetName, requiredRows, "ROWS");
+    }
+
+    /** 값 쓰기 전에 필요한 열 수를 확보한다. 재시도에 따른 여분의 빈 열은 허용한다. */
+    public void ensureColumnCapacity(String spreadsheetId, String sheetName, int requiredColumns) {
+        ensureDimensionCapacity(spreadsheetId, sheetName, requiredColumns, "COLUMNS");
+    }
+
+    private void ensureDimensionCapacity(String spreadsheetId, String sheetName, int requiredCount, String dimension) {
+        if (requiredCount < 1) {
+            throw new IllegalArgumentException("requiredCount must be positive");
         }
+        boolean rows = "ROWS".equals(dimension);
         List<Sheet> sheetList = executeWithRetry(() -> sheets.spreadsheets()
                 .get(spreadsheetId)
-                .setFields("sheets.properties(sheetId,title,gridProperties.rowCount)")
+                .setFields("sheets.properties(sheetId,title,gridProperties." + (rows ? "rowCount" : "columnCount") + ")")
                 .execute()).getSheets();
         if (sheetList == null) {
             throw new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR);
@@ -74,16 +84,19 @@ public class GoogleSheetsGateway {
                         && sheetName.equals(sheet.getProperties().getTitle()))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR));
-        if (target.getProperties().getGridProperties() == null
-                || target.getProperties().getGridProperties().getRowCount() == null) {
+        if (target.getProperties().getGridProperties() == null) {
             throw new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR);
         }
-        int currentRows = target.getProperties().getGridProperties().getRowCount();
-        if (currentRows < requiredRows) {
+        Integer currentCount = rows ? target.getProperties().getGridProperties().getRowCount()
+                : target.getProperties().getGridProperties().getColumnCount();
+        if (currentCount == null) {
+            throw new BusinessException(ErrorCode.GOOGLE_SHEETS_API_ERROR);
+        }
+        if (currentCount < requiredCount) {
             Request request = new Request().setAppendDimension(new AppendDimensionRequest()
                     .setSheetId(target.getProperties().getSheetId())
-                    .setDimension("ROWS")
-                    .setLength(requiredRows - currentRows));
+                    .setDimension(dimension)
+                    .setLength(requiredCount - currentCount));
             executeWithRetry(() -> sheets.spreadsheets().batchUpdate(spreadsheetId,
                     new BatchUpdateSpreadsheetRequest().setRequests(List.of(request))).execute());
         }
