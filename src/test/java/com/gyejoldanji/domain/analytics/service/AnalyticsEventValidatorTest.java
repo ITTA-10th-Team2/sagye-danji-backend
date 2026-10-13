@@ -73,7 +73,10 @@ class AnalyticsEventValidatorTest {
     @NullSource
     @ValueSource(strings = {"{}", "{\"referrer\":\"search\"}", "{\"shareScreen\":\"JAR\"}",
             "{\"referrer\":\"external_share\",\"shareScreen\":\"RECORD_DETAIL\"}",
-            "{\"referrer\":\"external__owned_social\"}", "{\"referrer\":\"New-channel.v2_123\"}"})
+            "{\"referrer\":\"external__owned_social\"}", "{\"referrer\":\"New-channel.v2_123\"}",
+            "{\"utmSource\":\"New-channel.v2_123\"}", "{\"utmCampaign\":\"1020_launch\"}",
+            "{\"utmSource\":\"instagram\",\"utmCampaign\":\"1020_launch\"}",
+            "{\"referrer\":\"external_link\",\"shareScreen\":\"JAR\",\"utmSource\":\"instagram\",\"utmCampaign\":\"1020_launch\"}"})
     void acceptsOptionalSessionStartProperties(String properties) {
         assertThat(parse(body(event("SESSION_START", properties)))).singleElement().satisfies(event -> {
             assertThat(event.getEventName()).isEqualTo("SESSION_START");
@@ -100,6 +103,48 @@ class AnalyticsEventValidatorTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"utmSource", "utmCampaign"})
+    void acceptsOneAndSixtyFourCharacterUtmValuesButRejectsSixtyFive(String key) {
+        for (int length : new int[]{1, 64}) {
+            String properties = "{" + q(key) + ":" + q("a".repeat(length)) + "}";
+            assertThat(parse(body(event("SESSION_START", properties))).getFirst().getProperties()).isEqualTo(properties);
+        }
+        assertRejected(body(event("SESSION_START", "{" + q(key) + ":" + q("a".repeat(65)) + "}")),
+                ErrorCode.ANALYTICS_INVALID_REQUEST);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"\"", "\" \"", "\"campaign space\"", "\"한글\"", "\"<script>\"",
+            "\"campaign\\n\"", "123", "null", "true", "[]", "{}"})
+    void rejectsInvalidSessionStartUtmValues(String value) {
+        for (String key : List.of("utmSource", "utmCampaign")) {
+            assertRejected(body(event("SESSION_START", "{" + q(key) + ":" + value + "}")),
+                    ErrorCode.ANALYTICS_INVALID_REQUEST);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
+            ONBOARDING_START   | {}
+            ONBOARDING_SKIP    | {}
+            HOME_VIEW          | {"entrySource":"APP_OPEN"}
+            HOME_ELEMENT_TAP   | {"target":"CHARACTER"}
+            RECORD_SCREEN_VIEW | {}
+            RECORD_START       | {"source":"GALLERY"}
+            JAR_VIEW           | {}
+            LOCKED_SEASON_CLICK | {"season":"WINTER"}
+            SHARE_CLICK        | {"sourceScreen":"HOME"}
+            SCREEN_ENGAGEMENT  | {"screenName":"HOME","durationMs":1000}
+            """)
+    void rejectsUtmPropertiesOnOtherEvents(String eventName, String properties) {
+        for (String key : List.of("utmSource", "utmCampaign")) {
+            String withUtm = "{" + q(key) + ":\"instagram\""
+                    + (properties.equals("{}") ? "}" : "," + properties.substring(1));
+            assertRejected(body(event(eventName, withUtm)), ErrorCode.ANALYTICS_INVALID_REQUEST);
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"ONBOARDING", "HOME", "RECORD_CREATE", "RECORD_DETAIL", "JAR"})
     void acceptsEveryShareScreen(String screen) {
         String properties = "{\"shareScreen\":" + q(screen) + "}";
@@ -108,7 +153,8 @@ class AnalyticsEventValidatorTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"{\"shareScreen\":\"UNKNOWN\"}", "{\"shareScreen\":\"home\"}",
-            "{\"shareScreen\":null}", "{\"shareScreen\":1}", "{\"referrer\":\"search\",\"extra\":\"x\"}", "null"})
+            "{\"shareScreen\":null}", "{\"shareScreen\":1}", "{\"referrer\":\"search\",\"extra\":\"x\"}", "null",
+            "{\"utm_source\":\"instagram\"}", "{\"utm_campaign\":\"1020_launch\"}"})
     void rejectsInvalidSessionStartProperties(String properties) {
         assertRejected(body(event("SESSION_START", properties)), ErrorCode.ANALYTICS_INVALID_REQUEST);
     }

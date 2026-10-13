@@ -75,6 +75,8 @@ public class AnalyticsEventValidator {
     // 프론트 src/lib/analytics.ts와 맞출 것(SESSION_START referrer).
     // https://developers-apps-in-toss.toss.im/documentation/common/growth/analytics/referrer
     private static final Pattern REFERRER_PATTERN = Pattern.compile("^[A-Za-z0-9_.-]{1,64}$");
+    // 프론트 src/lib/analytics.ts와 맞출 것(SESSION_START utmSource·utmCampaign).
+    private static final Pattern UTM_PATTERN = Pattern.compile("^[A-Za-z0-9_.-]{1,64}$");
 
     /** 이벤트별 허용 속성. 없는 이벤트는 속성이 없다. */
     private static final Map<ClientEventName, List<Prop>> PROPERTIES = new EnumMap<>(Map.of(
@@ -91,7 +93,9 @@ public class AnalyticsEventValidator {
                     Prop.range("durationMs", 0, 86_400_000)),
             ClientEventName.SESSION_START, List.of(
                     Prop.matching("referrer", false, REFERRER_PATTERN),
-                    Prop.oneOf("shareScreen", false, SCREENS))));
+                    Prop.oneOf("shareScreen", false, SCREENS),
+                    Prop.matching("utmSource", false, UTM_PATTERN),
+                    Prop.matching("utmCampaign", false, UTM_PATTERN))));
 
     private final Clock clock;
 

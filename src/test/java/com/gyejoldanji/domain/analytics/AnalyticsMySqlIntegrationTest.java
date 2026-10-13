@@ -32,6 +32,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.data.jpa.test.autoconfigure.AutoConfigureDataJpa;
@@ -47,6 +49,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -164,26 +167,26 @@ class AnalyticsMySqlIntegrationTest {
         }
     }
 
-    @Test
-    void sessionStartPreservesPropertiesAndIsStoredOnce() {
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"referrer\":\"external__owned_social\",\"shareScreen\":\"JAR\"}",
+            "{\"referrer\":\"external_share\",\"shareScreen\":\"JAR\","
+                    + "\"utmSource\":\"Instagram\",\"utmCampaign\":\"1020_launch\"}"})
+    void sessionStartPreservesPropertiesAndIsStoredOnce(String properties) {
         byte[] body = """
                 {"events":[{"eventId":"%s","eventName":"SESSION_START","sessionId":"%s",
                 "serviceVersion":"1.0.0","os":"WEB","sequence":1,"occurredAt":"2026-10-01T01:02:03Z",
-                "properties":{"referrer":"external__owned_social","shareScreen":"JAR"}}]}
-                """.formatted(UUID.randomUUID(), SESSION).getBytes(StandardCharsets.UTF_8);
+                "properties":%s}]}
+                """.formatted(UUID.randomUUID(), SESSION, properties).getBytes(StandardCharsets.UTF_8);
 
         assertThat(service.collect(memberId, body)).isEqualTo(new AnalyticsBatchResponse(1, 0));
         assertThat(service.collect(memberId, body)).isEqualTo(new AnalyticsBatchResponse(0, 1));
-        assertThat(jdbc.queryForList("SELECT event_name, event_source, "
-                + "JSON_UNQUOTE(JSON_EXTRACT(properties, '$.referrer')) AS referrer, "
-                + "JSON_UNQUOTE(JSON_EXTRACT(properties, '$.shareScreen')) AS share_screen, "
-                + "JSON_LENGTH(properties) AS property_count FROM analytics_events WHERE member_id = ?", memberId))
+        JsonMapper mapper = JsonMapper.builder().build();
+        assertThat(jdbc.queryForList("SELECT event_name, event_source, properties "
+                + "FROM analytics_events WHERE member_id = ?", memberId))
                 .singleElement().satisfies(row -> {
                     assertThat(row.get("event_name")).isEqualTo("SESSION_START");
                     assertThat(row.get("event_source")).isEqualTo("CLIENT");
-                    assertThat(row.get("referrer")).isEqualTo("external__owned_social");
-                    assertThat(row.get("share_screen")).isEqualTo("JAR");
-                    assertThat(((Number) row.get("property_count")).intValue()).isEqualTo(2);
+                    assertThat(mapper.readTree((String) row.get("properties"))).isEqualTo(mapper.readTree(properties));
                 });
     }
 

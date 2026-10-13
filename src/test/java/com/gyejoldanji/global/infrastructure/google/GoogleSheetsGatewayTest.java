@@ -18,7 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -167,8 +167,8 @@ class GoogleSheetsGatewayTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 23, 24})
-    void onlyMissingColumnsAreAddedToMatchingTab(int columns) throws Exception {
+    @CsvSource({"1, 25", "23, 25", "24, 25", "25, 27", "26, 27"})
+    void onlyMissingColumnsAreAddedToMatchingTab(int columns, int requiredColumns) throws Exception {
         metadata(new Spreadsheet().setSheets(List.of(
                 new Sheet().setProperties(new SheetProperties().setSheetId(9).setTitle("other")
                         .setGridProperties(new GridProperties().setColumnCount(26))),
@@ -176,23 +176,23 @@ class GoogleSheetsGatewayTest {
         Sheets.Spreadsheets.BatchUpdate update = mock(Sheets.Spreadsheets.BatchUpdate.class);
         when(spreadsheets.batchUpdate(eq(SPREADSHEET), any())).thenReturn(update);
 
-        gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25);
+        gateway.ensureColumnCapacity(SPREADSHEET, TAB, requiredColumns);
 
         ArgumentCaptor<BatchUpdateSpreadsheetRequest> requests = ArgumentCaptor.forClass(BatchUpdateSpreadsheetRequest.class);
         verify(spreadsheets).batchUpdate(eq(SPREADSHEET), requests.capture());
         assertThat(requests.getValue().getRequests()).singleElement().satisfies(request -> {
             assertThat(request.getAppendDimension().getSheetId()).isEqualTo(42);
             assertThat(request.getAppendDimension().getDimension()).isEqualTo("COLUMNS");
-            assertThat(request.getAppendDimension().getLength()).isEqualTo(25 - columns);
+            assertThat(request.getAppendDimension().getLength()).isEqualTo(requiredColumns - columns);
         });
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {25, 26})
-    void sufficientColumnsDoNotWrite(int columns) throws Exception {
+    @CsvSource({"25, 25", "26, 25", "27, 27", "28, 27"})
+    void sufficientColumnsDoNotWrite(int columns, int requiredColumns) throws Exception {
         metadata(new Spreadsheet().setSheets(List.of(columnSheet(columns))), COLUMN_FIELDS);
 
-        gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25);
+        gateway.ensureColumnCapacity(SPREADSHEET, TAB, requiredColumns);
 
         verify(spreadsheets, never()).batchUpdate(any(), any());
     }
