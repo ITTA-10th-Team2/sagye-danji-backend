@@ -60,8 +60,7 @@ public class RecordCommandService {
         rejectAttachedKey(request.objectKey());
 
         imageStorageService.validateUploadedObjects(memberId, List.of(request.objectKey()));
-        Member member = memberRepository.findByIdForUpdate(memberId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
+        Member member = lockedMember(memberId);
         LocalDate recordDate = request.recordDate() == null
                 ? LocalDate.now(clock.withZone(SEOUL))
                 : request.recordDate();
@@ -90,17 +89,21 @@ public class RecordCommandService {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
 
+        Member member = lockedMember(memberId);
         Record record = ownedRecordForUpdate(recordId, memberId);
         List<Image> currentImages = imageRepository.findAllByRecordIdForUpdate(recordId);
+        int previousYear = record.getRecordDate().getYear();
+        var previousSeason = record.getSeason();
         var nextSeason = seasonResolver.resolve(request.recordDate());
         boolean pageScopeChanged = record.getRecordDate().getYear() != request.recordDate().getYear()
                 || record.getSeason() != nextSeason;
         record.update(request.recordDate(), nextSeason, request.memo());
         if (pageScopeChanged) {
-            Member member = memberRepository.findByIdForUpdate(memberId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
             record.moveToJarPage(jarPageAllocationService.allocate(
                     member, request.recordDate().getYear(), nextSeason));
+            recordRepository.flush();
+            jarPageAllocationService.compact(member, previousYear, previousSeason);
+            jarPageAllocationService.compact(member, request.recordDate().getYear(), nextSeason);
         }
 
         ensureExactlyOneImage(currentImages);
@@ -132,13 +135,24 @@ public class RecordCommandService {
     public void delete(Long memberId, Long recordId) {
         validateMemberId(memberId);
         validateRecordId(recordId);
+        Member member = lockedMember(memberId);
         Record record = ownedRecordForUpdate(recordId, memberId);
+        int year = record.getRecordDate().getYear();
+        var season = record.getSeason();
         List<Image> images = imageRepository.findAllByRecordIdForUpdate(recordId);
         imageRepository.deleteAll(images);
         imageRepository.flush();
         recordRepository.delete(record);
         recordRepository.flush();
+        jarPageAllocationService.compact(member, year, season);
+        recordRepository.flush();
         imageStorageService.scheduleDeletionAfterCommit(images);
+    }
+
+    /** 모든 페이지 배정 변경을 회원 행 잠금 하나로 직렬화한다. */
+    private Member lockedMember(Long memberId) {
+        return memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_SESSION_INVALID));
     }
 
     /** 회원 소유권을 조회 조건에 포함해 없는 기록과 다른 회원 기록을 같은 404로 처리한다. */
