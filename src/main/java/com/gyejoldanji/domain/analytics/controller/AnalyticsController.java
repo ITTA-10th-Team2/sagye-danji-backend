@@ -38,7 +38,7 @@ public class AnalyticsController {
                     프론트 행동 이벤트를 1~50건 배치로 저장합니다. 같은 회원이 이미 보낸 eventId는 저장하지 않고 duplicateCount로 셉니다.
                     본문은 262,144바이트 이하 application/json(UTF-8)만 받습니다.
                     eventName 허용값: ONBOARDING_START, ONBOARDING_SKIP, HOME_VIEW, HOME_ELEMENT_TAP, RECORD_SCREEN_VIEW,
-                    RECORD_START, JAR_VIEW, LOCKED_SEASON_CLICK, SHARE_CLICK, SCREEN_ENGAGEMENT.""")
+                    RECORD_START, JAR_VIEW, LOCKED_SEASON_CLICK, SHARE_CLICK, SCREEN_ENGAGEMENT, SESSION_START.""")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수집 성공(재전송 포함)",
                     content = @Content(schema = @Schema(implementation = AnalyticsBatchResponse.class))),

@@ -164,6 +164,29 @@ class AnalyticsMySqlIntegrationTest {
         }
     }
 
+    @Test
+    void sessionStartPreservesPropertiesAndIsStoredOnce() {
+        byte[] body = """
+                {"events":[{"eventId":"%s","eventName":"SESSION_START","sessionId":"%s",
+                "serviceVersion":"1.0.0","os":"WEB","sequence":1,"occurredAt":"2026-10-01T01:02:03Z",
+                "properties":{"referrer":"external__owned_social","shareScreen":"JAR"}}]}
+                """.formatted(UUID.randomUUID(), SESSION).getBytes(StandardCharsets.UTF_8);
+
+        assertThat(service.collect(memberId, body)).isEqualTo(new AnalyticsBatchResponse(1, 0));
+        assertThat(service.collect(memberId, body)).isEqualTo(new AnalyticsBatchResponse(0, 1));
+        assertThat(jdbc.queryForList("SELECT event_name, event_source, "
+                + "JSON_UNQUOTE(JSON_EXTRACT(properties, '$.referrer')) AS referrer, "
+                + "JSON_UNQUOTE(JSON_EXTRACT(properties, '$.shareScreen')) AS share_screen, "
+                + "JSON_LENGTH(properties) AS property_count FROM analytics_events WHERE member_id = ?", memberId))
+                .singleElement().satisfies(row -> {
+                    assertThat(row.get("event_name")).isEqualTo("SESSION_START");
+                    assertThat(row.get("event_source")).isEqualTo("CLIENT");
+                    assertThat(row.get("referrer")).isEqualTo("external__owned_social");
+                    assertThat(row.get("share_screen")).isEqualTo("JAR");
+                    assertThat(((Number) row.get("property_count")).intValue()).isEqualTo(2);
+                });
+    }
+
     /**
      * 이벤트가 하나도 없는 서로 다른 신규 회원 둘이 동시에 첫 배치를 보낸다. 둘 다 기존 키 조회를 마친 뒤에야 INSERT하도록 맞춰도 둘 다
      * 성공한다(REPEATABLE READ + 없는 키 FOR UPDATE의 갭 락이면 서로의 INSERT를 막아 데드락이 난다).

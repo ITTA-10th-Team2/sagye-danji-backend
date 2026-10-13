@@ -17,6 +17,8 @@ import com.gyejoldanji.global.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +39,7 @@ class GoogleSheetsGatewayTest {
     private static final String SPREADSHEET = "test-spreadsheet";
     private static final String TAB = "analytics_events";
     private static final String FIELDS = "sheets.properties(sheetId,title,gridProperties.rowCount)";
+    private static final String COLUMN_FIELDS = "sheets.properties(sheetId,title,gridProperties.columnCount)";
 
     @Mock
     private Sheets sheets;
@@ -163,10 +166,97 @@ class GoogleSheetsGatewayTest {
         verify(get, times(3)).execute();
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 23, 24})
+    void onlyMissingColumnsAreAddedToMatchingTab(int columns) throws Exception {
+        metadata(new Spreadsheet().setSheets(List.of(
+                new Sheet().setProperties(new SheetProperties().setSheetId(9).setTitle("other")
+                        .setGridProperties(new GridProperties().setColumnCount(26))),
+                columnSheet(columns))), COLUMN_FIELDS);
+        Sheets.Spreadsheets.BatchUpdate update = mock(Sheets.Spreadsheets.BatchUpdate.class);
+        when(spreadsheets.batchUpdate(eq(SPREADSHEET), any())).thenReturn(update);
+
+        gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25);
+
+        ArgumentCaptor<BatchUpdateSpreadsheetRequest> requests = ArgumentCaptor.forClass(BatchUpdateSpreadsheetRequest.class);
+        verify(spreadsheets).batchUpdate(eq(SPREADSHEET), requests.capture());
+        assertThat(requests.getValue().getRequests()).singleElement().satisfies(request -> {
+            assertThat(request.getAppendDimension().getSheetId()).isEqualTo(42);
+            assertThat(request.getAppendDimension().getDimension()).isEqualTo("COLUMNS");
+            assertThat(request.getAppendDimension().getLength()).isEqualTo(25 - columns);
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {25, 26})
+    void sufficientColumnsDoNotWrite(int columns) throws Exception {
+        metadata(new Spreadsheet().setSheets(List.of(columnSheet(columns))), COLUMN_FIELDS);
+
+        gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25);
+
+        verify(spreadsheets, never()).batchUpdate(any(), any());
+    }
+
+    @Test
+    void missingColumnCountFailsWithoutWriting() throws Exception {
+        metadata(new Spreadsheet().setSheets(List.of(sheet(TAB, 42, 100))), COLUMN_FIELDS);
+
+        assertThatThrownBy(() -> gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25))
+                .isInstanceOf(BusinessException.class);
+        verify(spreadsheets, never()).batchUpdate(any(), any());
+    }
+
+    @Test
+    void missingColumnGridMetadataFailsWithoutWriting() throws Exception {
+        metadata(new Spreadsheet().setSheets(List.of(new Sheet().setProperties(
+                new SheetProperties().setSheetId(42).setTitle(TAB)))), COLUMN_FIELDS);
+
+        assertThatThrownBy(() -> gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25))
+                .isInstanceOf(BusinessException.class);
+        verify(spreadsheets, never()).batchUpdate(any(), any());
+    }
+
+    @Test
+    void missingSheetsMetadataFailsWithoutWriting() throws Exception {
+        metadata(new Spreadsheet(), COLUMN_FIELDS);
+
+        assertThatThrownBy(() -> gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25))
+                .isInstanceOf(BusinessException.class);
+        verify(spreadsheets, never()).batchUpdate(any(), any());
+    }
+
+    @Test
+    void columnMetadataRetriesRateLimit() throws Exception {
+        Spreadsheet result = new Spreadsheet().setSheets(List.of(columnSheet(25)));
+        Sheets.Spreadsheets.Get get = metadata(result, COLUMN_FIELDS);
+        when(get.execute()).thenThrow(httpError(429)).thenReturn(result);
+
+        gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25);
+
+        verify(get, times(2)).execute();
+        verify(spreadsheets, never()).batchUpdate(any(), any());
+    }
+
+    @Test
+    void columnExpansionRetriesServerFailure() throws Exception {
+        metadata(new Spreadsheet().setSheets(List.of(columnSheet(24))), COLUMN_FIELDS);
+        Sheets.Spreadsheets.BatchUpdate update = mock(Sheets.Spreadsheets.BatchUpdate.class);
+        when(spreadsheets.batchUpdate(eq(SPREADSHEET), any())).thenReturn(update);
+        when(update.execute()).thenThrow(httpError(503)).thenReturn(null);
+
+        gateway.ensureColumnCapacity(SPREADSHEET, TAB, 25);
+
+        verify(update, times(2)).execute();
+    }
+
     private Sheets.Spreadsheets.Get metadata(Spreadsheet result) throws IOException {
+        return metadata(result, FIELDS);
+    }
+
+    private Sheets.Spreadsheets.Get metadata(Spreadsheet result, String fields) throws IOException {
         Sheets.Spreadsheets.Get get = mock(Sheets.Spreadsheets.Get.class);
         when(spreadsheets.get(SPREADSHEET)).thenReturn(get);
-        when(get.setFields(FIELDS)).thenReturn(get);
+        when(get.setFields(fields)).thenReturn(get);
         when(get.execute()).thenReturn(result);
         return get;
     }
@@ -174,6 +264,11 @@ class GoogleSheetsGatewayTest {
     private static Sheet sheet(String title, int id, int rows) {
         return new Sheet().setProperties(new SheetProperties().setSheetId(id).setTitle(title)
                 .setGridProperties(new GridProperties().setRowCount(rows)));
+    }
+
+    private static Sheet columnSheet(int columns) {
+        return new Sheet().setProperties(new SheetProperties().setSheetId(42).setTitle(TAB)
+                .setGridProperties(new GridProperties().setColumnCount(columns)));
     }
 
     private static HttpResponseException httpError(int status) {

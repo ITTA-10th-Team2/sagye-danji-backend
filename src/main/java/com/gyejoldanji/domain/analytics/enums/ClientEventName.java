@@ -11,5 +11,6 @@ public enum ClientEventName {
     JAR_VIEW,
     LOCKED_SEASON_CLICK,
     SHARE_CLICK,
-    SCREEN_ENGAGEMENT
+    SCREEN_ENGAGEMENT,
+    SESSION_START
 }

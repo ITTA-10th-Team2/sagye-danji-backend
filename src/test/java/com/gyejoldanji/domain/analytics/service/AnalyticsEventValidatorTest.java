@@ -21,6 +21,7 @@ import com.gyejoldanji.global.common.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +35,7 @@ class AnalyticsEventValidatorTest {
 
     private final AnalyticsEventValidator validator = new AnalyticsEventValidator(Clock.fixed(NOW, ZoneOffset.UTC));
 
-    /** 10종 최소 예시가 모두 통과하고 CLIENT·소문자 UUID·마이크로초 시각·compact 속성으로 바뀐다. */
+    /** 11종 최소 예시가 모두 통과하고 CLIENT·소문자 UUID·마이크로초 시각·compact 속성으로 바뀐다. */
     @Test
     void acceptsMinimalExampleOfEveryClientEvent() {
         Map<String, String> uppercaseId = event("HOME_VIEW", "{ \"entrySource\" : \"APP_OPEN\" }");
@@ -49,9 +50,10 @@ class AnalyticsEventValidatorTest {
                 event("JAR_VIEW", "{}"),
                 event("LOCKED_SEASON_CLICK", "{\"season\":\"WINTER\"}"),
                 event("SHARE_CLICK", "{\"sourceScreen\":\"RECORD_DETAIL\",\"method\":\"SYSTEM_SHARE\"}"),
-                event("SCREEN_ENGAGEMENT", "{\"screenName\":\"JAR\",\"durationMs\":86400000}")));
+                event("SCREEN_ENGAGEMENT", "{\"screenName\":\"JAR\",\"durationMs\":86400000}"),
+                event("SESSION_START", null)));
 
-        assertThat(events).hasSize(10);
+        assertThat(events).hasSize(11);
         AnalyticsEvent home = events.get(2);
         assertThat(home.getMemberId()).isEqualTo(42L);
         assertThat(home.getEventId()).isEqualTo("3f1c2b4a-8d7e-4f60-9a1b-2c3d4e5f6a7b");
@@ -65,6 +67,50 @@ class AnalyticsEventValidatorTest {
         assertThat(home.getReceivedAt()).isEqualTo(LocalDateTime.parse("2026-10-11T03:00:00.123456"));
         assertThat(home.getProperties()).isEqualTo("{\"entrySource\":\"APP_OPEN\"}");
         assertThat(events.get(1).getProperties()).isEqualTo("{}");
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"{}", "{\"referrer\":\"search\"}", "{\"shareScreen\":\"JAR\"}",
+            "{\"referrer\":\"external_share\",\"shareScreen\":\"RECORD_DETAIL\"}",
+            "{\"referrer\":\"external__owned_social\"}", "{\"referrer\":\"New-channel.v2_123\"}"})
+    void acceptsOptionalSessionStartProperties(String properties) {
+        assertThat(parse(body(event("SESSION_START", properties)))).singleElement().satisfies(event -> {
+            assertThat(event.getEventName()).isEqualTo("SESSION_START");
+            assertThat(event.getProperties()).isEqualTo(properties == null ? "{}" : properties);
+        });
+    }
+
+    @Test
+    void acceptsOneAndSixtyFourCharacterReferrersButRejectsSixtyFive() {
+        for (int length : new int[]{1, 64}) {
+            String properties = "{\"referrer\":" + q("a".repeat(length)) + "}";
+            assertThat(parse(body(event("SESSION_START", properties))).getFirst().getProperties()).isEqualTo(properties);
+        }
+        assertRejected(body(event("SESSION_START", "{\"referrer\":" + q("a".repeat(65)) + "}")),
+                ErrorCode.ANALYTICS_INVALID_REQUEST);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"\"", "\" \"", "\"search space\"", "\"한글\"", "\"<script>\"",
+            "\"search\\n\"", "123", "null", "true", "[]", "{}"})
+    void rejectsInvalidSessionStartReferrers(String referrer) {
+        assertRejected(body(event("SESSION_START", "{\"referrer\":" + referrer + "}")),
+                ErrorCode.ANALYTICS_INVALID_REQUEST);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ONBOARDING", "HOME", "RECORD_CREATE", "RECORD_DETAIL", "JAR"})
+    void acceptsEveryShareScreen(String screen) {
+        String properties = "{\"shareScreen\":" + q(screen) + "}";
+        assertThat(parse(body(event("SESSION_START", properties))).getFirst().getProperties()).isEqualTo(properties);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"shareScreen\":\"UNKNOWN\"}", "{\"shareScreen\":\"home\"}",
+            "{\"shareScreen\":null}", "{\"shareScreen\":1}", "{\"referrer\":\"search\",\"extra\":\"x\"}", "null"})
+    void rejectsInvalidSessionStartProperties(String properties) {
+        assertRejected(body(event("SESSION_START", properties)), ErrorCode.ANALYTICS_INVALID_REQUEST);
     }
 
     /** 빈 본문·JSON 아님·객체 아님·다른 최상위 키·events 없음/배열 아님/빈 배열·null 원소는 001이다. */
