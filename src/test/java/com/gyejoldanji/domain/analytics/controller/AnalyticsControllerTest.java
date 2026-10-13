@@ -18,6 +18,8 @@ import com.gyejoldanji.global.common.exception.ErrorCode;
 import com.gyejoldanji.global.security.SecurityTestConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -94,13 +96,16 @@ class AnalyticsControllerTest {
         verify(analyticsService).collect(42L, BODY);
     }
 
-    @Test
-    void collectsSessionStartWithUnchangedProperties() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"referrer\":\"external__owned_social\",\"shareScreen\":\"JAR\"}",
+            "{\"referrer\":\"external_share\",\"shareScreen\":\"JAR\","
+                    + "\"utmSource\":\"Instagram\",\"utmCampaign\":\"1020_launch\"}"})
+    void collectsSessionStartWithUnchangedProperties(String properties) throws Exception {
         byte[] body = """
                 {"events":[{"eventId":"%s","eventName":"SESSION_START","sessionId":"%s",
                 "serviceVersion":"1.0.0","os":"WEB","sequence":1,"occurredAt":"2026-10-01T01:02:03Z",
-                "properties":{"referrer":"external__owned_social","shareScreen":"JAR"}}]}
-                """.formatted(UUID.randomUUID(), SID).getBytes(StandardCharsets.UTF_8);
+                "properties":%s}]}
+                """.formatted(UUID.randomUUID(), SID, properties).getBytes(StandardCharsets.UTF_8);
         when(analyticsService.collect(42L, body)).thenReturn(new AnalyticsBatchResponse(1, 0));
 
         mockMvc.perform(events(body).header("Authorization", authorization))

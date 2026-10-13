@@ -30,12 +30,12 @@ class AnalyticsSheetRowMapperTest {
     private final AnalyticsSheetRowMapper mapper = new AnalyticsSheetRowMapper(JsonMapper.builder().build());
 
     @Test
-    void hasTheTwentyFiveContractHeadersInOrder() {
+    void hasTheTwentySevenContractHeadersInOrder() {
         assertThat(AnalyticsSheetRowMapper.HEADERS).containsExactly(
                 "event_id", "user_key", "session_id", "event_time", "received_at", "service_version", "os", "event_name",
                 "event_source", "sequence", "target", "source", "photo_count", "record_id", "season", "previous_screen",
                 "source_screen", "method", "screen_name", "duration_ms", "jar_page_id", "sticker_count", "properties_json",
-                "referrer", "share_screen");
+                "referrer", "share_screen", "utm_source", "utm_campaign");
     }
 
     /** 현재 클라이언트 11종·서버 4종의 속성 위치와 비어 있어야 하는 칸을 함께 확인한다. */
@@ -49,17 +49,17 @@ class AnalyticsSheetRowMapperTest {
 
         List<Object> row = mapper.toRow(event, SECRET);
 
-        assertThat(row).hasSize(25);
+        assertThat(row).hasSize(27);
         assertThat(row.subList(0, 10)).containsExactly(event.getEventId(), "e696ad3cca79513b", SESSION,
                 "2026-10-11T23:03:48.123456+09:00",
                 eventName instanceof ClientEventName ? "2026-10-11T23:03:49.654321+09:00"
                         : "2026-10-11T23:03:48.123456+09:00",
                 "1.0.0", "ANDROID", eventName.name(), eventName instanceof ClientEventName ? "CLIENT" : "SERVER",
                 eventName instanceof ClientEventName ? 3 : "");
-        List<Object> expectedProperties = new ArrayList<>(Collections.nCopies(15, ""));
+        List<Object> expectedProperties = new ArrayList<>(Collections.nCopies(17, ""));
         expectedProperties.set(12, properties);
         expectedCells.forEach((index, value) -> expectedProperties.set(index - 10, value));
-        assertThat(row.subList(10, 25)).containsExactlyElementsOf(expectedProperties);
+        assertThat(row.subList(10, 27)).containsExactlyElementsOf(expectedProperties);
     }
 
     static Stream<Arguments> events() {
@@ -70,6 +70,15 @@ class AnalyticsSheetRowMapperTest {
                 Arguments.of(ClientEventName.SESSION_START, "{\"shareScreen\":\"JAR\"}", Map.of(24, "JAR")),
                 Arguments.of(ClientEventName.SESSION_START, "{\"referrer\":\"external_share\",\"shareScreen\":\"JAR\"}",
                         Map.of(23, "external_share", 24, "JAR")),
+                Arguments.of(ClientEventName.SESSION_START, "{\"utmSource\":\"instagram\"}", Map.of(25, "instagram")),
+                Arguments.of(ClientEventName.SESSION_START, "{\"utmCampaign\":\"1020_launch\"}", Map.of(26, "1020_launch")),
+                Arguments.of(ClientEventName.SESSION_START,
+                        "{\"utmSource\":\"instagram\",\"utmCampaign\":\"1020_launch\"}",
+                        Map.of(25, "instagram", 26, "1020_launch")),
+                Arguments.of(ClientEventName.SESSION_START,
+                        "{\"referrer\":\"external_share\",\"shareScreen\":\"JAR\","
+                                + "\"utmSource\":\"instagram\",\"utmCampaign\":\"1020_launch\"}",
+                        Map.of(23, "external_share", 24, "JAR", 25, "instagram", 26, "1020_launch")),
                 Arguments.of(ClientEventName.ONBOARDING_START, "{}", Map.of()),
                 Arguments.of(ClientEventName.ONBOARDING_SKIP, "{}", Map.of()),
                 Arguments.of(ClientEventName.HOME_VIEW, "{\"entrySource\":\"APP_OPEN\"}", Map.of()),
